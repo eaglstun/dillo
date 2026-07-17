@@ -1,0 +1,65 @@
+# Dillo iOS render spike — generate DilloSpike.xcodeproj with `xcodegen`
+# (run from this directory; brew install xcodegen).
+name: DilloSpike
+options:
+  bundleIdPrefix: org.dillo
+  deploymentTarget:
+    iOS: "15.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    CLANG_CXX_LANGUAGE_STANDARD: c++11
+    GCC_C_LANGUAGE_STANDARD: c99
+    GCC_ENABLE_CPP_EXCEPTIONS: "NO"
+    GCC_ENABLE_CPP_RTTI: "NO"
+    # Repo root (for "dw/..." includes) and engine dir (for config.h).
+    HEADER_SEARCH_PATHS:
+      - "$(SRCROOT)/.."
+      - "$(SRCROOT)/engine"
+    GCC_PREPROCESSOR_DEFINITIONS:
+      - DILLO_LIBDIR=\"/var/empty/\"
+    WARNING_CFLAGS:
+      - "-Wall"
+      - "-Wno-unused-parameter"
+      - "-Wno-deprecated-declarations"
+
+targets:
+  # The FLTK-free engine: dw core+widgets, lout, dlib, plus the Apple
+  # platform/view implementations. No FLTK symbol may appear here
+  # (Phase 0 checkpoint in PLAN.md).
+  DilloEngine:
+    type: library.static
+    platform: iOS
+    sources:
+      - path: ../dw
+        excludes:
+          - "fltk*"
+          - "Makefile*"
+      - path: ../lout
+        excludes:
+          - "Makefile*"
+      - path: ../dlib
+        excludes:
+          - "Makefile*"
+      - path: engine
+
+  DilloSpike:
+    type: application
+    platform: iOS
+    sources:
+      - path: DilloSpike
+    dependencies:
+      - target: DilloEngine
+      - sdk: CoreText.framework
+      - sdk: CoreGraphics.framework
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.dillo.DilloSpike
+        SWIFT_VERSION: "5.0"
+        SWIFT_OBJC_BRIDGING_HEADER: DilloSpike/DilloSpike-Bridging-Header.h
+        GENERATE_INFOPLIST_FILE: "YES"
+        INFOPLIST_KEY_UILaunchScreen_Generation: "YES"
+        CURRENT_PROJECT_VERSION: "1"
+        MARKETING_VERSION: "0.1"
+        TARGETED_DEVICE_FAMILY: "1"
