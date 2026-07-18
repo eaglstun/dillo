@@ -99,6 +99,7 @@ private:
    };
 
    StubResourceFactory resourceFactory;
+   core::ui::ResourceFactory *customFactory;   /* not owned */
 
    class IdleFunc: public lout::object::Object
    {
@@ -154,6 +155,13 @@ public:
    void copySelection (const char *text, int destination);
 
    core::ui::ResourceFactory *getResourceFactory ();
+
+   /**
+    * \brief Install a factory producing real (e.g. UIKit-backed) form
+    *    widgets; falls back to the display-only stubs when unset.
+    *    The factory is owned by the caller.
+    */
+   void setResourceFactory (core::ui::ResourceFactory *factory);
 };
 
 } // namespace apple

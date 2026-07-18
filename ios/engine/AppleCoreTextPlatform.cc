@@ -367,6 +367,7 @@ ApplePlatform::ApplePlatform ()
 {
    layout = NULL;
    view = NULL;
+   customFactory = NULL;
    idleQueue = new container::typed::List <IdleFunc> (true);
    idleFuncId = 0;
 }
@@ -562,7 +563,12 @@ void ApplePlatform::copySelection (const char *text, int destination)
 
 core::ui::ResourceFactory *ApplePlatform::getResourceFactory ()
 {
-   return &resourceFactory;
+   return customFactory ? customFactory : &resourceFactory;
+}
+
+void ApplePlatform::setResourceFactory (core::ui::ResourceFactory *factory)
+{
+   customFactory = factory;
 }
 
 } // namespace apple
