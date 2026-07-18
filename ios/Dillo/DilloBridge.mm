@@ -33,6 +33,16 @@
 #include "CoreGraphicsView.hh"
 #include "IosShell.hh"
 
+/// One in-flight image fetch (owned by _pendingImages until it completes
+/// or the page is left).
+@interface PendingImage : NSObject
+@property (nonatomic, assign) DilloWeb *web;
+@property (nonatomic, assign) int clientKey;
+@property (nonatomic, strong) NSURLSessionDataTask *task;
+@end
+@implementation PendingImage
+@end
+
 @implementation DilloBridge {
    dw::apple::ApplePlatform *_platform;   // owned by _layout
    dw::core::Layout *_layout;
@@ -40,6 +50,8 @@
    BrowserWindow *_bw;
    char *_pageBuf;       // current page's parser buffer (mutated, retained)
    char *_oldPageBuf;    // previous page's buffer, freed after widget swap
+   NSURLSession *_imageSession;
+   NSMutableDictionary<NSNumber *, PendingImage *> *_pendingImages;
 }
 
 static void invalidateTrampoline (void *data)
@@ -64,6 +76,12 @@ static void titleTrampoline (void *ctx, const char *title)
       self.onTitle ([NSString stringWithUTF8String:title]);
 }
 
+static void imageFetchTrampoline (void *ctx, DilloWeb *web, int clientKey)
+{
+   DilloBridge *self = (__bridge DilloBridge *)ctx;
+   [self fetchImageForWeb:web clientKey:clientKey];
+}
+
 /* One-time engine-wide initialization; mirrors the relevant subset (and
  * order) of dillo.cc's main(). */
 static void initDilloOnce (void)
@@ -85,8 +103,7 @@ static void initDilloOnce (void)
                                      dStrdup ("Snell Roundhand");
    dFree (prefs.font_fantasy);    prefs.font_fantasy = dStrdup ("Papyrus");
 
-   /* No image pipeline yet: render alt text instead of broken boxes. */
-   prefs.load_images = FALSE;
+   prefs.load_images = TRUE;
 
    a_Web_init ();
    a_Bw_init ();
@@ -114,17 +131,79 @@ static void initDilloOnce (void)
    _pageBuf = NULL;
    _oldPageBuf = NULL;
 
+   _imageSession =
+      [NSURLSession sessionWithConfiguration:
+                       [NSURLSessionConfiguration defaultSessionConfiguration]];
+   _pendingImages = [NSMutableDictionary dictionary];
+
    _layout->viewportSizeChanged (_view, width, height);
 
    dw::ios::setShellHooks (openUrlTrampoline, titleTrampoline,
-                           (__bridge void *)self);
+                           imageFetchTrampoline, (__bridge void *)self);
 
    return self;
 }
 
+/* Fetch one image asynchronously; deliver (or abort) on the main thread.
+ * The engine is single-threaded — every engine call stays on main. */
+- (void)fetchImageForWeb:(DilloWeb *)web clientKey:(int)clientKey
+{
+   NSString *urlString =
+      [NSString stringWithUTF8String:URL_STR (web->url)];
+   NSURL *url = [NSURL URLWithString:urlString];
+   if (!url) {
+      dw::ios::abortImageWeb (web, clientKey);
+      return;
+   }
+
+   PendingImage *pending = [PendingImage new];
+   pending.web = web;
+   pending.clientKey = clientKey;
+   NSNumber *key = @(clientKey);
+   _pendingImages[key] = pending;
+
+   __weak DilloBridge *weakSelf = self;
+   pending.task = [_imageSession dataTaskWithURL:url
+                 completionHandler:^(NSData *data, NSURLResponse *response,
+                                     NSError *error) {
+      dispatch_async (dispatch_get_main_queue (), ^{
+         DilloBridge *self = weakSelf;
+         if (!self)
+            return;
+         /* If the page was left, cancelPendingImages already freed the
+          * web; the entry's absence tells us to do nothing. */
+         PendingImage *p = self->_pendingImages[key];
+         if (!p)
+            return;
+         [self->_pendingImages removeObjectForKey:key];
+
+         if (error || !data || data.length == 0)
+            dw::ios::abortImageWeb (p.web, p.clientKey);
+         else
+            dw::ios::deliverImageData (p.web, p.clientKey,
+                                       data.bytes, (int) data.length);
+         self->_platform->runIdles ();
+         if (self.onInvalidate)
+            self.onInvalidate ();
+      });
+   }];
+   [pending.task resume];
+}
+
+- (void)cancelPendingImages
+{
+   for (NSNumber *key in _pendingImages) {
+      PendingImage *p = _pendingImages[key];
+      [p.task cancel];
+      dw::ios::cancelImageWeb (p.web, p.clientKey);
+   }
+   [_pendingImages removeAllObjects];
+}
+
 - (void)dealloc
 {
-   dw::ios::setShellHooks (NULL, NULL, NULL);
+   [self cancelPendingImages];
+   dw::ios::setShellHooks (NULL, NULL, NULL, NULL);
    delete _layout;   // deletes platform, view, widget tree → DilloHtml
    a_Bw_free (_bw);
    dFree (_pageBuf);
@@ -158,6 +237,10 @@ static void initDilloOnce (void)
 
 - (void)loadHTML:(NSString *)html url:(NSString *)urlString
 {
+   /* Leaving the page: outstanding image fetches must not touch the old
+    * widget tree once it's freed below. */
+   [self cancelPendingImages];
+
    DilloUrl *url = a_Url_new ([urlString UTF8String], NULL);
 
    DilloHtml *page = new DilloHtml (_bw, url, "text/html; charset=UTF-8");

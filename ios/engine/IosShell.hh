@@ -26,15 +26,42 @@
 namespace dw {
 namespace ios {
 
+typedef struct _DilloWeb DilloWeb;
+
 typedef void (*OpenUrlHook) (void *ctx, const DilloUrl *url);
 typedef void (*TitleHook) (void *ctx, const char *title);
 
-/** Register the app-shell callbacks (pass NULLs to clear). */
-void setShellHooks (OpenUrlHook openUrl, TitleHook title, void *ctx);
+/**
+ * Called when the parser wants an image fetched (a_Capi_open_url with an
+ * image web). The shell fetches asynchronously and must eventually call
+ * either deliverImageData or abortImageWeb with the same web/clientKey —
+ * unless the web was already freed by a cancelImageWeb sweep.
+ */
+typedef void (*ImageFetchHook) (void *ctx, DilloWeb *web, int clientKey);
 
-/* Called by the a_UIcmd_* stubs in BrowserStubs.cc. */
+/** Register the app-shell callbacks (pass NULLs to clear). */
+void setShellHooks (OpenUrlHook openUrl, TitleHook title,
+                    ImageFetchHook imageFetch, void *ctx);
+
+/* Called by the a_UIcmd_* stubs in BrowserStubs.cc / IosCapi.cc. */
 void dispatchOpenUrl (const DilloUrl *url);
 void dispatchTitle (const char *title);
+bool dispatchImageFetch (DilloWeb *web, int clientKey);
+
+/**
+ * Decode fetched image bytes (any ImageIO format) and feed them into the
+ * web's DilloImage: imgbuf creation, set_parms, row writes, close. Frees
+ * the web and closes the bw client. Failure to decode behaves like abort.
+ */
+void deliverImageData (DilloWeb *web, int clientKey,
+                       const void *bytes, int len);
+
+/** Abort an image fetch: tell the image, close the client, free the web. */
+void abortImageWeb (DilloWeb *web, int clientKey);
+
+/** Drop a pending image web without touching its (possibly dead) image
+    widget state beyond the normal unref — used when leaving the page. */
+void cancelImageWeb (DilloWeb *web, int clientKey);
 
 /** Store a completed resource (keyed by its absolute URL string). */
 void cachePut (const char *url, const char *contentType,

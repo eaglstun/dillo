@@ -36,12 +36,15 @@ namespace ios {
 
 static OpenUrlHook openUrlHook = NULL;
 static TitleHook titleHook = NULL;
+static ImageFetchHook imageFetchHook = NULL;
 static void *hookCtx = NULL;
 
-void setShellHooks (OpenUrlHook openUrl, TitleHook title, void *ctx)
+void setShellHooks (OpenUrlHook openUrl, TitleHook title,
+                    ImageFetchHook imageFetch, void *ctx)
 {
    openUrlHook = openUrl;
    titleHook = title;
+   imageFetchHook = imageFetch;
    hookCtx = ctx;
 }
 
@@ -55,6 +58,14 @@ void dispatchTitle (const char *title)
 {
    if (titleHook)
       titleHook (hookCtx, title);
+}
+
+bool dispatchImageFetch (DilloWeb *web, int clientKey)
+{
+   if (!imageFetchHook)
+      return false;
+   imageFetchHook (hookCtx, web, clientKey);
+   return true;
 }
 
 } // namespace ios
