@@ -15,14 +15,15 @@ modifications through four milestones.** Everything iOS-specific lives in
 
 ---
 
-## What exists (milestones 1–4, done)
+## What exists (milestones 1–5, done)
 
-| #   | Milestone                                                                       | Proof                                         |
-| --- | ------------------------------------------------------------------------------- | --------------------------------------------- |
-| 1   | Engine renders wrapped styled text via Core Text, no FLTK                       | `spike-result.png`                            |
-| 2   | Real parser stack (`html.cc` → `styleengine.cc` → `css*.cc`) renders a document | `spike-html-result.png`                       |
-| 3   | Browses the live web: URL bar, HTTPS, stylesheets, link taps, back, scrolling   | `browser-home.png`, `browser-user-manual.png` |
-| 4   | Images (async fetch + ImageIO decode + engine scaling); forms don't crash       | `browser-wikipedia.png`                       |
+| #   | Milestone                                                                       | Proof                                             |
+| --- | ------------------------------------------------------------------------------- | ------------------------------------------------- |
+| 1   | Engine renders wrapped styled text via Core Text, no FLTK                       | `spike-result.png`                                |
+| 2   | Real parser stack (`html.cc` → `styleengine.cc` → `css*.cc`) renders a document | `spike-html-result.png`                           |
+| 3   | Browses the live web: URL bar, HTTPS, stylesheets, link taps, back, scrolling   | `browser-home.png`, `browser-user-manual.png`     |
+| 4   | Images (async fetch + ImageIO decode + engine scaling); forms don't crash       | `browser-wikipedia.png`                           |
+| 5   | Interactive forms: native UIKit controls, GET search + POST submission          | `browser-ddg-search.png`, `browser-form-post.png` |
 
 ### Architecture (the desktop → iOS seam)
 
@@ -61,25 +62,18 @@ xcodebuild -project DilloSpike.xcodeproj -scheme Dillo \
 
 ## Next milestones (each independently shippable)
 
-Roughly ordered by user-visible value per unit of work; none are started.
+Roughly ordered by user-visible value per unit of work.
 
-### M5 — Interactive forms
+### ~~M5 — Interactive forms~~ (done)
 
-The web is unusable for real tasks without them. The pieces:
-
-1. Replace the display-only `StubResources` with resources that own a
-   native `UIControl` (UITextField/UISwitch/UIButton/UIPickerView),
-   positioned via the resource's `sizeAllocate` → converted to view
-   coords (mind the scroll offset). This mirrors how FLTK embeds live
-   widgets (`fltkui.cc` is the reference).
-2. Form submission: `form.cc` already builds the query and calls
-   `a_UIcmd_open_url` (GET) / needs a POST path. GET works today once
-   controls hold real values; POST needs a `loadURL(method:body:)` on the
-   bridge and PageLoader.
-3. Keyboard management + a "form focused" mode in the view controller.
-
-Risk: keeping native subviews aligned during reflows — hook
-`queueResize`/allocation like `FltkPlatform::attachResource` does.
+Shipped as planned, with two design deltas from the sketch above worth
+noting: controls live as subviews of the browser's UIScrollView (whose
+content coordinates ARE canvas coordinates), so no scroll-offset math or
+reflow hooks were needed — `sizeAllocate` alone keeps them aligned; and
+the factory swap happens via `ApplePlatform::setResourceFactory`
+(`Dillo/NativeFormResources.mm` is the UIKit factory, `StubResources`
+remains the fallback). GET and POST verified live; see `RESULT.md`.
+Remaining form gaps live in M6.5 below.
 
 ### M6 — Image completeness
 
@@ -94,6 +88,16 @@ Risk: keeping native subviews aligned during reflows — hook
   orbit).
 - CGImage caching inside `AppleImgbuf::draw` (currently rebuilt per
   paint; cache and invalidate on `copyRow`).
+
+### M6.5 — Form completeness
+
+- `<button>` labels: the ComplexButton child HTML isn't painted (blank
+  native button today). Either render the child layout into a small
+  canvas view, or extract the button's text content for the title.
+- File uploads (`<input type=file>`): UIDocumentPicker + multipart wiring
+  (the multipart encoder in form.cc already works).
+- Inline multi-select lists (currently a popup menu with checkmarks).
+- Autofill/password-manager integration (`textContentType` hints).
 
 ### M7 — Zoom + wide pages
 

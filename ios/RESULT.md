@@ -1,13 +1,68 @@
 # Dillo iOS — Results
 
-**Status: it's a browser, with pictures.** Milestone 1: the `dw/` engine
-renders styled, word-wrapped text on iOS through Core Text / Core Graphics
-with zero FLTK linked in. Milestone 2: the **real HTML parser and CSS
-engine** run on iOS against a hardcoded document. Milestone 3: **Dillo
+**Status: it's a browser you can actually use.** Milestone 1: the `dw/`
+engine renders styled, word-wrapped text on iOS through Core Text / Core
+Graphics with zero FLTK linked in. Milestone 2: the **real HTML parser and
+CSS engine** run on iOS against a hardcoded document. Milestone 3: **Dillo
 browses the live web** — address bar, HTTPS, external stylesheets, tappable
 links, history. Milestone 4: **images** — async loading, ImageIO decode,
-the engine's own scaling — and enough form-widget robustness to survive the
-real web.
+the engine's own scaling. Milestone 5: **interactive forms** — native
+UIKit controls driven by the engine's layout, GET and POST submission
+through dillo's own `form.cc`.
+
+## Milestone 5 — interactive forms
+
+![search](browser-ddg-search.png) ![form](browser-form-filled.png)
+
+Verified end-to-end on live sites:
+
+- **Search works.** `html.duckduckgo.com/html`: typing "dillo browser"
+  into the native `UITextField` and pressing return fires
+  `emitActivate` → `form.cc` (single-entry form) → GET query URL →
+  navigation. Results render with the query preserved in the results
+  page's own field and the region/time `<select>`s as native popup
+  buttons.
+- **POST works.** `httpbingo.org/forms/post`: name typed into a text
+  field, "Medium" picked by radio (exclusivity enforced through the
+  shared group), Bacon and Mushroom checked, submit tapped. The JSON echo
+  shows `"method": "POST"`, `application/x-www-form-urlencoded`, and
+  `custname=Fenwick&...` — the body built by dillo's own
+  `DilloHtmlForm::buildQueryData` reading values out of UIKit controls.
+
+How it's put together:
+
+- **`Dillo/NativeFormResources.mm`** — the iOS counterpart of
+  `dw/fltkui.cc`. Each `dw::core::ui::Resource` owns a real UIControl
+  (`UITextField`, `UITextView`, SF-Symbol check/radio buttons with shared
+  radio groups, `UIButton` label buttons, `UIButton`+`UIMenu` selects)
+  added as a subview of the browser's scroll view — whose content
+  coordinates are canvas coordinates, so controls track the page during
+  scrolling with zero extra work. Geometry flows engine→UIKit via
+  `sizeRequest`/`sizeAllocate`; interaction flows back through the
+  engine's own `emitClicked`/`emitActivate` (which is what `form.cc`
+  subscribes to). Controls are hidden until first allocation.
+  `ApplePlatform::setResourceFactory` swaps this factory in; the
+  display-only `StubResources` remain the fallback.
+- **POST plumbing**: `a_UIcmd_open_url` receives a `DilloUrl` with
+  `URL_Post` + body `Dstr` (and `URL_MultipartEnc`, whose boundary is
+  recovered from the body's first line, as the desktop `http.c` does).
+  The bridge surfaces `(url, body, contentType)` to the shell;
+  `PageLoader` issues the request; history entries carry method+body so
+  back/reload re-issue correctly.
+- **Chrome**: the link-tap recognizer now takes only touches that land
+  on the bare scroll view (a gesture delegate), so controls get their
+  touches; keyboard overlap adjusts the scroll inset; `text/plain` /
+  JSON / XML responses render escaped inside `<pre>` (that's how the
+  POST echo is readable).
+
+Gaps: `<button>` labels aren't rendered (ComplexButton child HTML is not
+painted — shows as a blank native button); file uploads are display-only;
+`ListResource` multi-select uses a popup menu rather than an inline list;
+no autofill/password-manager integration.
+
+ObjC++ gotcha worth remembering: blocks are not lambdas — they get no
+access to the enclosing member function's protected members, hence the
+public `fire*`/`toggle`/`pick` trampolines on the resource classes.
 
 ## Milestone 4 — images (and surviving forms)
 
