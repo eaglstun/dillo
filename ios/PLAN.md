@@ -105,17 +105,14 @@ desktop has ctrl+/- zoom) → reflow via `viewportSizeChanged` + re-layout.
 Double-tap to toggle fit-width for pages wider than the viewport (which
 currently wrap at min-width and pan horizontally).
 
-### M8 — Navigation polish
+### ~~M8 — Navigation polish~~ (mostly done)
 
-- Fragment/anchor scrolling: the engine's anchor machinery exists
-  (`Layout::setAnchor`/anchor table); wire `#fragment` links to a scroll
-  offset instead of a reload.
-- Find-in-page: `dw/findtext.cc` is already compiled; needs UI + calls
-  into `findtextState`.
-- Selection + copy: `dw/selection.cc` is compiled; wire long-press →
-  selection events, `copySelection` → `UIPasteboard`.
-- Per-page load progress (bw counters already track image clients).
-- History persistence, swipe-back gesture, error-page styling.
+Shipped: anchor scrolling (usesViewport flipped true — the engine's
+scroll machinery now runs, with UIScrollView doing the moving),
+find-in-page (engine search + highlight + scroll-into-view, thin find
+bar), selection + copy (long-press → engine selection → UIPasteboard),
+left-edge swipe-back, styled error pages. See `RESULT.md`.
+Still open: per-page load progress, history persistence.
 
 ### M9 — Platform correctness
 

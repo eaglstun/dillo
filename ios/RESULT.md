@@ -10,6 +10,40 @@ the engine's own scaling. Milestone 5: **interactive forms** — native
 UIKit controls driven by the engine's layout, GET and POST submission
 through dillo's own `form.cc`.
 
+## Milestone 6 — navigation polish (the M8 list)
+
+![find](browser-find.png) ![selection](browser-selection.png)
+
+The unlock for this whole milestone: `CoreGraphicsView::usesViewport()`
+now returns **true**, which switches on the engine's entire scrolling
+machinery (`Layout::scrollTo0` is gated on it) — while the actual moving
+is still done by the shell's `UIScrollView`, driven through a new
+`scrollTo` hook, with user scrolling reported back via
+`Layout::scrollPosChanged` so scroll-into-view math stays correct.
+Everything below fell out of that plus thin UI:
+
+- **Anchor navigation**: tapping a `#fragment` link into the current
+  document scrolls (engine anchor table → animated content offset)
+  instead of reloading; `a_Url_cmp` (which ignores fragments) decides
+  "same document". Cross-page deep links (`page.html#section`) anchor
+  after load via `setAnchor`. Verified on the user manual's ToC — and the
+  anchored link turned purple, because the history/visited-color module
+  has been along for the ride the whole time.
+- **Find-in-page**: a find bar (magnifier in the chrome) drives
+  `Layout::search`/`resetSearch` — `dw/findtext.cc` was compiled since
+  milestone 2 and just needed a UI. Matches get the engine's yellow-on-
+  black highlight and scroll into view; wrapped/not-found status shown.
+- **Selection + copy**: long-press-drag forwards
+  press/motion/release with `BUTTON1_MASK` into the engine's selection
+  state machine (`dw/selection.cc`, also compiled all along); on release
+  the selection lands on `UIPasteboard` via a new copy hook, with a
+  "Copied: …" toast. Scrolling is disabled during the gesture — the pan
+  recognizer wins otherwise.
+- **Chrome**: left-edge swipe navigates back; error pages got styling
+  and a "Try again" link.
+
+Not done from the M8 list: per-page load progress, history persistence.
+
 ## Milestone 5.5 — form completeness (the M6.5 list)
 
 ![file upload](browser-form-file.png)
