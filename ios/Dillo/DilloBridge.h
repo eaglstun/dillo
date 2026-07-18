@@ -9,6 +9,7 @@
 
 #import <Foundation/Foundation.h>
 #import <CoreGraphics/CoreGraphics.h>
+#import <UIKit/UIKit.h>
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -27,8 +28,15 @@ NS_ASSUME_NONNULL_BEGIN
 /// shell to re-read canvasHeight.
 @property (nonatomic, copy, nullable) void (^onInvalidate)(void);
 
-/// A link was activated (tap on <a>). Absolute URL string.
-@property (nonatomic, copy, nullable) void (^onOpenURL)(NSString *url);
+/// A link was activated or a form submitted. For GET navigations body and
+/// contentType are nil; for POST they carry the encoded form data.
+@property (nonatomic, copy, nullable) void (^onOpenURL)(
+   NSString *url, NSData *_Nullable body, NSString *_Nullable contentType);
+
+/// Install the view that hosts native form controls (the browser's scroll
+/// view: its content coordinates are canvas coordinates). Must be called
+/// before the first loadHTML for forms to be interactive.
+- (void)setFormHost:(UIView *)host;
 
 /// The parser saw <title>.
 @property (nonatomic, copy, nullable) void (^onTitle)(NSString *title);

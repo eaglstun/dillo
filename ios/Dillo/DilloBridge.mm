@@ -32,6 +32,7 @@
 #include "AppleCoreTextPlatform.hh"
 #include "CoreGraphicsView.hh"
 #include "IosShell.hh"
+#include "NativeFormResources.h"
 
 /// One in-flight image fetch (owned by _pendingImages until it completes
 /// or the page is left).
@@ -52,6 +53,7 @@
    char *_oldPageBuf;    // previous page's buffer, freed after widget swap
    NSURLSession *_imageSession;
    NSMutableDictionary<NSNumber *, PendingImage *> *_pendingImages;
+   dw::core::ui::ResourceFactory *_formFactory;
 }
 
 static void invalidateTrampoline (void *data)
@@ -64,9 +66,41 @@ static void invalidateTrampoline (void *data)
 static void openUrlTrampoline (void *ctx, const DilloUrl *url)
 {
    DilloBridge *self = (__bridge DilloBridge *)ctx;
-   NSLog (@"DilloBridge: link activated: %s", URL_STR (url));
-   if (self.onOpenURL)
-      self.onOpenURL ([NSString stringWithUTF8String:URL_STR (url)]);
+   NSLog (@"DilloBridge: navigate: %s%s", URL_STR (url),
+          (URL_FLAGS (url) & URL_Post) ? " (POST)" : "");
+   if (!self.onOpenURL)
+      return;
+
+   NSString *urlString = [NSString stringWithUTF8String:URL_STR (url)];
+   NSData *body = nil;
+   NSString *contentType = nil;
+
+   if ((URL_FLAGS (url) & URL_Post) && URL_DATA (url)) {
+      Dstr *data = URL_DATA (url);
+      body = [NSData dataWithBytes:data->str length:data->len];
+      if (URL_FLAGS (url) & URL_MultipartEnc) {
+         /* The boundary is the first body line minus the leading dashes
+          * (this is how the desktop http.c derives it too). */
+         NSString *boundary = nil;
+         if (data->len > 2 && data->str[0] == '-' && data->str[1] == '-') {
+            const char *end = (const char *) memchr (data->str, '\r',
+                                                     data->len);
+            if (end)
+               boundary = [[NSString alloc]
+                             initWithBytes:data->str + 2
+                                    length:end - data->str - 2
+                                  encoding:NSUTF8StringEncoding];
+         }
+         contentType = boundary ?
+            [NSString stringWithFormat:
+                @"multipart/form-data; boundary=%@", boundary] :
+            @"multipart/form-data";
+      } else {
+         contentType = @"application/x-www-form-urlencoded";
+      }
+   }
+
+   self.onOpenURL (urlString, body, contentType);
 }
 
 static void titleTrampoline (void *ctx, const char *title)
@@ -200,6 +234,14 @@ static void initDilloOnce (void)
    [_pendingImages removeAllObjects];
 }
 
+- (void)setFormHost:(UIView *)host
+{
+   if (_formFactory)
+      dw::ios::destroyNativeResourceFactory (_formFactory);
+   _formFactory = dw::ios::createNativeResourceFactory (host);
+   _platform->setResourceFactory (_formFactory);
+}
+
 - (void)dealloc
 {
    [self cancelPendingImages];
@@ -208,6 +250,8 @@ static void initDilloOnce (void)
    a_Bw_free (_bw);
    dFree (_pageBuf);
    dFree (_oldPageBuf);
+   if (_formFactory)
+      dw::ios::destroyNativeResourceFactory (_formFactory);
 }
 
 - (NSString *)resolveURL:(NSString *)href baseURL:(NSString *)base

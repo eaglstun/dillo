@@ -43,13 +43,25 @@ final class PageLoader {
     }
 
     func load(_ urlString: String,
+              method: String = "GET",
+              body: Data? = nil,
+              bodyContentType: String? = nil,
               completion: @escaping (Result<Page, LoadError>) -> Void) {
         guard let url = URL(string: urlString), url.scheme != nil else {
             completion(.failure(.badURL))
             return
         }
 
-        session.dataTask(with: url) { data, response, error in
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        if let body = body {
+            request.httpBody = body
+            if let ct = bodyContentType {
+                request.setValue(ct, forHTTPHeaderField: "Content-Type")
+            }
+        }
+
+        session.dataTask(with: request) { data, response, error in
             if let error = error {
                 DispatchQueue.main.async {
                     completion(.failure(.transport(error)))
@@ -61,24 +73,41 @@ final class PageLoader {
             let contentType =
                 (http?.value(forHTTPHeaderField: "Content-Type") ?? "text/html")
                 .lowercased()
-            guard contentType.contains("html") || contentType.contains("text/")
-            else {
+
+            let finalURL = (response?.url ?? url).absoluteString
+            let isHTML = contentType.contains("html")
+            let isTextish = contentType.contains("text/")
+                || contentType.contains("json")
+                || contentType.contains("xml")
+            guard isHTML || isTextish else {
                 DispatchQueue.main.async {
                     completion(.failure(.notHTML(contentType)))
                 }
                 return
             }
 
-            let finalURL = (response?.url ?? url).absoluteString
-            let html = Self.decode(
+            var html = Self.decode(
                 data, headerEncoding: response?.textEncodingName,
-                sniffMeta: true)
+                sniffMeta: isHTML)
+            if !isHTML {
+                // Plain text / JSON: present verbatim, monospaced.
+                html = Self.wrapAsPre(html, title: finalURL)
+            }
 
             self.fetchStylesheets(html: html, baseURL: finalURL) { sheets in
                 completion(.success(Page(
                     html: html, finalURL: finalURL, stylesheets: sheets)))
             }
         }.resume()
+    }
+
+    private static func wrapAsPre(_ text: String, title: String) -> String {
+        let escaped = text
+            .replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
+        return "<html><head><title>\(title)</title></head>"
+            + "<body><pre>\(escaped)</pre></body></html>"
     }
 
     // MARK: - Charset decoding

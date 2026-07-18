@@ -43,8 +43,24 @@ final class BrowserViewController: UIViewController {
     private let scrollView = UIScrollView()
     private let renderView = RenderView(frame: .zero)
 
+    /// One navigation: URL plus, for form POSTs, the request body.
+    private struct HistoryEntry {
+        let url: String
+        let method: String
+        let body: Data?
+        let bodyContentType: String?
+
+        init(url: String, method: String = "GET", body: Data? = nil,
+             bodyContentType: String? = nil) {
+            self.url = url
+            self.method = method
+            self.body = body
+            self.bodyContentType = bodyContentType
+        }
+    }
+
     /// Simple app-side history (the desktop nav.c depends on the cache).
-    private var history: [String] = []
+    private var history: [HistoryEntry] = []
     private var historyIndex = -1
 
     private let homePage = "https://dillo-browser.github.io/"
@@ -71,11 +87,20 @@ final class BrowserViewController: UIViewController {
         bridge.onTitle = { [weak self] title in
             self?.titleLabel.text = title
         }
-        bridge.onOpenURL = { [weak self] url in
-            self?.navigate(to: url)
+        bridge.onOpenURL = { [weak self] url, body, contentType in
+            self?.load(HistoryEntry(
+                url: url, method: body != nil ? "POST" : "GET",
+                body: body, bodyContentType: contentType),
+                recordHistory: true)
         }
+        bridge.setFormHost(scrollView)
 
-        load(homePage, recordHistory: true)
+        load(HistoryEntry(url: homePage), recordHistory: true)
+
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(keyboardChanged(_:)),
+            name: UIResponder.keyboardWillChangeFrameNotification,
+            object: nil)
     }
 
     private func buildChrome() {
@@ -152,10 +177,23 @@ final class BrowserViewController: UIViewController {
         ])
         scrollView.delegate = self
         scrollView.backgroundColor = .clear
+        scrollView.keyboardDismissMode = .interactive
 
         let tap = UITapGestureRecognizer(
             target: self, action: #selector(handleTap(_:)))
+        tap.delegate = self
         scrollView.addGestureRecognizer(tap)
+    }
+
+    @objc private func keyboardChanged(_ note: Notification) {
+        guard let frame = note.userInfo?[
+            UIResponder.keyboardFrameEndUserInfoKey] as? CGRect
+        else { return }
+        let overlap = max(
+            0, scrollView.bounds.maxY
+                - scrollView.convert(frame, from: nil).minY)
+        scrollView.contentInset.bottom = overlap
+        scrollView.verticalScrollIndicatorInsets.bottom = overlap
     }
 
     override func viewDidLayoutSubviews() {
@@ -188,13 +226,16 @@ final class BrowserViewController: UIViewController {
     }
 
     private func navigate(to url: String) {
-        load(url, recordHistory: true)
+        load(HistoryEntry(url: url), recordHistory: true)
     }
 
-    private func load(_ urlString: String, recordHistory: Bool) {
+    private func load(_ entry: HistoryEntry, recordHistory: Bool) {
         spinner.startAnimating()
-        addressField.text = urlString
-        loader.load(urlString) { [weak self] result in
+        addressField.text = entry.url
+        view.endEditing(true)
+        loader.load(entry.url, method: entry.method, body: entry.body,
+                    bodyContentType: entry.bodyContentType) {
+            [weak self] result in
             guard let self = self else { return }
             self.spinner.stopAnimating()
             switch result {
@@ -202,7 +243,10 @@ final class BrowserViewController: UIViewController {
                 if recordHistory {
                     self.history.removeSubrange(
                         (self.historyIndex + 1)..<self.history.count)
-                    self.history.append(page.finalURL)
+                    self.history.append(HistoryEntry(
+                        url: page.finalURL, method: entry.method,
+                        body: entry.body,
+                        bodyContentType: entry.bodyContentType))
                     self.historyIndex = self.history.count - 1
                 }
                 self.addressField.text = page.finalURL
@@ -214,7 +258,7 @@ final class BrowserViewController: UIViewController {
                 self.bridge.loadHTML(page.html, url: page.finalURL)
                 self.scrollView.setContentOffset(.zero, animated: false)
             case .failure(let error):
-                self.showErrorPage(error, for: urlString)
+                self.showErrorPage(error, for: entry.url)
             }
             self.backButton.isEnabled = self.historyIndex > 0
         }
@@ -262,6 +306,18 @@ final class BrowserViewController: UIViewController {
 extension BrowserViewController: UIScrollViewDelegate {
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
         renderView.canvasOrigin = scrollView.contentOffset
+    }
+}
+
+extension BrowserViewController: UIGestureRecognizerDelegate {
+    /// Form controls (subviews of the scroll view) handle their own
+    /// touches; the link-tap recognizer only takes touches that land on
+    /// the bare scroll view (i.e. the rendered page).
+    func gestureRecognizer(
+        _ gestureRecognizer: UIGestureRecognizer,
+        shouldReceive touch: UITouch
+    ) -> Bool {
+        return touch.view === scrollView
     }
 }
 
