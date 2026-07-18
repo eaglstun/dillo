@@ -42,6 +42,26 @@ targets:
       - path: ../dlib
         excludes:
           - "Makefile*"
+      # The HTML parser / CSS / style-engine subset of src/. The FLTK UI
+      # layer (uicmd, menu, dialog, ...) and the network stack (capi, cache,
+      # IO/) are NOT here — engine/BrowserStubs.cc satisfies their symbols.
+      - path: ../src
+        includes:
+          - "html.cc"
+          - "css.cc"
+          - "cssparser.cc"
+          - "styleengine.cc"
+          - "table.cc"
+          - "form.cc"
+          - "image.cc"
+          - "bw.c"
+          - "misc.c"
+          - "colors.c"
+          - "url.c"
+          - "prefs.c"
+          - "klist.c"
+          - "bitvec.c"
+          - "history.c"
       - path: engine
 
   DilloSpike:
@@ -53,6 +73,7 @@ targets:
       - target: DilloEngine
       - sdk: CoreText.framework
       - sdk: CoreGraphics.framework
+      - sdk: libiconv.tbd
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: org.dillo.DilloSpike
