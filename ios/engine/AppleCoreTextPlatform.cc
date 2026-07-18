@@ -19,6 +19,8 @@
 #include "../../lout/msg.h"
 #include "../../lout/misc.hh"
 #include "AppleCoreTextPlatform.hh"
+#include "AppleImgbuf.hh"
+#include "StubResources.hh"
 
 namespace dw {
 namespace apple {
@@ -298,7 +300,7 @@ core::ui::LabelButtonResource *
 ApplePlatform::StubResourceFactory::createLabelButtonResource (const char
                                                                *label)
 {
-   return NULL;
+   return new StubLabelButtonResource (label);
 }
 
 core::ui::ComplexButtonResource *
@@ -306,7 +308,7 @@ ApplePlatform::StubResourceFactory::createComplexButtonResource (core::Widget
                                                                  *widget,
                                                                  bool relief)
 {
-   return NULL;
+   return new StubComplexButtonResource (widget, relief);
 }
 
 core::ui::ListResource *
@@ -315,13 +317,13 @@ ApplePlatform::StubResourceFactory::createListResource (core::ui::ListResource
                                                         selectionMode,
                                                         int rows)
 {
-   return NULL;
+   return new StubListResource (selectionMode, rows);
 }
 
 core::ui::OptionMenuResource *
 ApplePlatform::StubResourceFactory::createOptionMenuResource ()
 {
-   return NULL;
+   return new StubOptionMenuResource ();
 }
 
 core::ui::EntryResource *
@@ -331,7 +333,7 @@ ApplePlatform::StubResourceFactory::createEntryResource (int size,
                                                          const char
                                                          *placeholder)
 {
-   return NULL;
+   return new StubEntryResource (size, password, label, placeholder);
 }
 
 core::ui::MultiLineTextResource *
@@ -340,13 +342,13 @@ ApplePlatform::StubResourceFactory::createMultiLineTextResource (int cols,
                                                                  const char
                                                                  *placeholder)
 {
-   return NULL;
+   return new StubMultiLineTextResource (cols, rows, placeholder);
 }
 
 core::ui::CheckButtonResource *
 ApplePlatform::StubResourceFactory::createCheckButtonResource (bool activated)
 {
-   return NULL;
+   return new StubCheckButtonResource (activated);
 }
 
 core::ui::RadioButtonResource *
@@ -355,7 +357,8 @@ ApplePlatform::StubResourceFactory::createRadioButtonResource (core::ui
                                                                *groupedWith,
                                                                bool activated)
 {
-   return NULL;
+   return new StubRadioButtonResource ((StubRadioButtonResource*)groupedWith,
+                                       activated);
 }
 
 // ----------------------------------------------------------------------
@@ -550,7 +553,7 @@ void ApplePlatform::cancelTooltip ()
 core::Imgbuf *ApplePlatform::createImgbuf (core::Imgbuf::Type type,
                                            int width, int height, double gamma)
 {
-   return NULL;   /* spike is text-only; images are the next milestone */
+   return new AppleImgbuf (type, width, height, gamma);
 }
 
 void ApplePlatform::copySelection (const char *text, int destination)

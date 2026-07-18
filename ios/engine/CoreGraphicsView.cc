@@ -19,6 +19,7 @@
 #include "../../lout/misc.hh"
 #include "CoreGraphicsView.hh"
 #include "AppleCoreTextPlatform.hh"
+#include "AppleImgbuf.hh"
 
 namespace dw {
 namespace apple {
@@ -472,7 +473,9 @@ void CoreGraphicsView::drawSimpleWrappedText (core::style::Font *font,
 void CoreGraphicsView::drawImage (core::Imgbuf *imgbuf, int xRoot, int yRoot,
                                   int x, int y, int width, int height)
 {
-   /* spike is text-only; images are the next milestone */
+   if (!cg || !imgbuf)
+      return;
+   ((AppleImgbuf*)imgbuf)->draw (cg, xRoot, yRoot, x, y, width, height);
 }
 
 // ----------------------------------------------------------------------

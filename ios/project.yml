@@ -54,6 +54,7 @@ targets:
           - "table.cc"
           - "form.cc"
           - "image.cc"
+          - "imgbuf.cc"
           - "bw.c"
           - "misc.c"
           - "colors.c"
@@ -73,6 +74,7 @@ targets:
       - target: DilloEngine
       - sdk: CoreText.framework
       - sdk: CoreGraphics.framework
+      - sdk: ImageIO.framework
       - sdk: libiconv.tbd
     info:
       path: Dillo/Info.plist
