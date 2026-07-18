@@ -210,7 +210,9 @@ final class BrowserViewController: UIViewController {
 
     private func normalizeInput(_ text: String) -> String {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.contains("://") { return trimmed }
+        if trimmed.hasPrefix("data:") || trimmed.contains("://") {
+            return trimmed
+        }
         return "https://" + trimmed
     }
 

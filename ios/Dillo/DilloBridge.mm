@@ -16,9 +16,12 @@
  */
 
 #import "DilloBridge.h"
+#import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
 #include <stdio.h>
 #include <string.h>
+#include <string>
+#include <objc/runtime.h>
 
 #include "dw/core.hh"
 #include "dw/textblock.hh"
@@ -33,6 +36,25 @@
 #include "CoreGraphicsView.hh"
 #include "IosShell.hh"
 #include "NativeFormResources.h"
+
+/// Delegate for the file picker (file-input support).
+@interface FilePickerDelegate : NSObject <UIDocumentPickerDelegate>
+@property (nonatomic, copy, nullable) void (^onPick)(NSURL *_Nullable url);
+@end
+
+@implementation FilePickerDelegate
+- (void)documentPicker:(UIDocumentPickerViewController *)controller
+    didPickDocumentsAtURLs:(NSArray<NSURL *> *)urls
+{
+   if (self.onPick)
+      self.onPick (urls.firstObject);
+}
+- (void)documentPickerWasCancelled:(UIDocumentPickerViewController *)controller
+{
+   if (self.onPick)
+      self.onPick (nil);
+}
+@end
 
 /// One in-flight image fetch (owned by _pendingImages until it completes
 /// or the page is left).
@@ -54,6 +76,9 @@
    NSURLSession *_imageSession;
    NSMutableDictionary<NSNumber *, PendingImage *> *_pendingImages;
    dw::core::ui::ResourceFactory *_formFactory;
+   UIView *_formHost;
+   std::string _selectedFilePath;   // storage backing a_UIcmd_select_file
+   BOOL _haveSelectedFile;
 }
 
 static void invalidateTrampoline (void *data)
@@ -116,6 +141,12 @@ static void imageFetchTrampoline (void *ctx, DilloWeb *web, int clientKey)
    [self fetchImageForWeb:web clientKey:clientKey];
 }
 
+static const char *selectFileTrampoline (void *ctx)
+{
+   DilloBridge *self = (__bridge DilloBridge *)ctx;
+   return [self modalSelectFile];
+}
+
 /* One-time engine-wide initialization; mirrors the relevant subset (and
  * order) of dillo.cc's main(). */
 static void initDilloOnce (void)
@@ -173,9 +204,55 @@ static void initDilloOnce (void)
    _layout->viewportSizeChanged (_view, width, height);
 
    dw::ios::setShellHooks (openUrlTrampoline, titleTrampoline,
-                           imageFetchTrampoline, (__bridge void *)self);
+                           imageFetchTrampoline, selectFileTrampoline,
+                           (__bridge void *)self);
 
    return self;
+}
+
+/*
+ * File input support, in two phases (no nested run loops — UIKit refuses
+ * to complete a presentation while a touch event is held up):
+ *
+ * 1. First click: form.cc's readFile calls a_UIcmd_select_file; nothing
+ *    is stored yet, so the picker is presented asynchronously and NULL is
+ *    returned (that click's readFile is a no-op).
+ * 2. The user picks a file; the completion stores the local path and
+ *    re-fires the same button's click. This time readFile's
+ *    a_UIcmd_select_file call finds the stored path and consumes it —
+ *    file read, button label updated, all inside dillo's own flow.
+ */
+- (const char *)modalSelectFile
+{
+   if (_haveSelectedFile) {
+      _haveSelectedFile = NO;
+      return _selectedFilePath.c_str ();
+   }
+
+   UIViewController *rootVC = _formHost.window.rootViewController;
+   if (!rootVC)
+      return NULL;
+
+   UIDocumentPickerViewController *picker =
+      [[UIDocumentPickerViewController alloc]
+         initForOpeningContentTypes:@[ UTTypeItem ] asCopy:YES];
+   __weak DilloBridge *weakSelf = self;
+   FilePickerDelegate *delegate = [FilePickerDelegate new];
+   delegate.onPick = ^(NSURL *url) {
+      DilloBridge *self = weakSelf;
+      if (!self || !url)
+         return;
+      self->_selectedFilePath = url.path.UTF8String;
+      self->_haveSelectedFile = YES;
+      dw::ios::refireLastLabelClick ();
+   };
+   picker.delegate = delegate;
+   /* keep the delegate alive as long as the picker */
+   objc_setAssociatedObject (picker, "dillo.pickerDelegate", delegate,
+                             OBJC_ASSOCIATION_RETAIN);
+
+   [rootVC presentViewController:picker animated:YES completion:nil];
+   return NULL;
 }
 
 /* Fetch one image asynchronously; deliver (or abort) on the main thread.
@@ -236,6 +313,7 @@ static void initDilloOnce (void)
 
 - (void)setFormHost:(UIView *)host
 {
+   _formHost = host;
    if (_formFactory)
       dw::ios::destroyNativeResourceFactory (_formFactory);
    _formFactory = dw::ios::createNativeResourceFactory (host);
@@ -245,7 +323,7 @@ static void initDilloOnce (void)
 - (void)dealloc
 {
    [self cancelPendingImages];
-   dw::ios::setShellHooks (NULL, NULL, NULL, NULL);
+   dw::ios::setShellHooks (NULL, NULL, NULL, NULL, NULL);
    delete _layout;   // deletes platform, view, widget tree → DilloHtml
    a_Bw_free (_bw);
    dFree (_pageBuf);
@@ -282,8 +360,10 @@ static void initDilloOnce (void)
 - (void)loadHTML:(NSString *)html url:(NSString *)urlString
 {
    /* Leaving the page: outstanding image fetches must not touch the old
-    * widget tree once it's freed below. */
+    * widget tree once it's freed below, and a picked-but-unconsumed file
+    * must not leak into another page's form. */
    [self cancelPendingImages];
+   _haveSelectedFile = NO;
 
    DilloUrl *url = a_Url_new ([urlString UTF8String], NULL);
 

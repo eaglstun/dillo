@@ -75,6 +75,7 @@ targets:
       - sdk: CoreText.framework
       - sdk: CoreGraphics.framework
       - sdk: ImageIO.framework
+      - sdk: UniformTypeIdentifiers.framework
       - sdk: libiconv.tbd
     info:
       path: Dillo/Info.plist
@@ -84,6 +85,10 @@ targets:
         # A browser must reach plain-http sites; TLS still preferred.
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
+        # Make the app's Documents folder visible in Files, so the file
+        # picker (<input type=file>) has somewhere local to browse.
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: org.dillo.ios
