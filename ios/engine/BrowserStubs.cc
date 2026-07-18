@@ -37,14 +37,17 @@ namespace ios {
 static OpenUrlHook openUrlHook = NULL;
 static TitleHook titleHook = NULL;
 static ImageFetchHook imageFetchHook = NULL;
+static SelectFileHook selectFileHook = NULL;
 static void *hookCtx = NULL;
 
 void setShellHooks (OpenUrlHook openUrl, TitleHook title,
-                    ImageFetchHook imageFetch, void *ctx)
+                    ImageFetchHook imageFetch, SelectFileHook selectFile,
+                    void *ctx)
 {
    openUrlHook = openUrl;
    titleHook = title;
    imageFetchHook = imageFetch;
+   selectFileHook = selectFile;
    hookCtx = ctx;
 }
 
@@ -66,6 +69,11 @@ bool dispatchImageFetch (DilloWeb *web, int clientKey)
       return false;
    imageFetchHook (hookCtx, web, clientKey);
    return true;
+}
+
+const char *dispatchSelectFile ()
+{
+   return selectFileHook ? selectFileHook (hookCtx) : NULL;
 }
 
 } // namespace ios
@@ -163,7 +171,7 @@ void a_UIcmd_redirection0(void *vbw, const DilloUrl *url)
 
 const char *a_UIcmd_select_file(void)
 {
-   return NULL;
+   return dw::ios::dispatchSelectFile ();
 }
 
 void a_UIcmd_page_popup(void *vbw, bool_t has_bugs, void *v_cssUrls)

@@ -39,14 +39,23 @@ typedef void (*TitleHook) (void *ctx, const char *title);
  */
 typedef void (*ImageFetchHook) (void *ctx, DilloWeb *web, int clientKey);
 
+/**
+ * Called when a form's file input wants a file (a_UIcmd_select_file).
+ * Must run a modal picker and return a readable local path (storage owned
+ * by the shell, valid until the next call), or NULL on cancel.
+ */
+typedef const char *(*SelectFileHook) (void *ctx);
+
 /** Register the app-shell callbacks (pass NULLs to clear). */
 void setShellHooks (OpenUrlHook openUrl, TitleHook title,
-                    ImageFetchHook imageFetch, void *ctx);
+                    ImageFetchHook imageFetch, SelectFileHook selectFile,
+                    void *ctx);
 
 /* Called by the a_UIcmd_* stubs in BrowserStubs.cc / IosCapi.cc. */
 void dispatchOpenUrl (const DilloUrl *url);
 void dispatchTitle (const char *title);
 bool dispatchImageFetch (DilloWeb *web, int clientKey);
+const char *dispatchSelectFile ();
 
 /**
  * Decode fetched image bytes (any ImageIO format) and feed them into the
