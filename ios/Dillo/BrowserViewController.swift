@@ -38,10 +38,15 @@ final class BrowserViewController: UIViewController {
     private let addressField = UITextField()
     private let backButton = UIButton(type: .system)
     private let reloadButton = UIButton(type: .system)
+    private let findButton = UIButton(type: .system)
     private let spinner = UIActivityIndicatorView(style: .medium)
     private let titleLabel = UILabel()
     private let scrollView = UIScrollView()
     private let renderView = RenderView(frame: .zero)
+
+    private let findBar = UIStackView()
+    private let findField = UITextField()
+    private let findStatus = UILabel()
 
     /// One navigation: URL plus, for form POSTs, the request body.
     private struct HistoryEntry {
@@ -88,10 +93,30 @@ final class BrowserViewController: UIViewController {
             self?.titleLabel.text = title
         }
         bridge.onOpenURL = { [weak self] url, body, contentType in
-            self?.load(HistoryEntry(
+            guard let self = self else { return }
+            // Same-document #fragment: scroll instead of reloading.
+            if body == nil, self.bridge.navigateFragment(url) {
+                self.addressField.text = url
+                return
+            }
+            self.load(HistoryEntry(
                 url: url, method: body != nil ? "POST" : "GET",
                 body: body, bodyContentType: contentType),
                 recordHistory: true)
+        }
+        bridge.onScrollTo = { [weak self] origin in
+            guard let self = self else { return }
+            let maxY = max(0, self.scrollView.contentSize.height
+                - self.scrollView.bounds.height)
+            let maxX = max(0, self.scrollView.contentSize.width
+                - self.scrollView.bounds.width)
+            self.scrollView.setContentOffset(
+                CGPoint(x: min(max(0, origin.x), maxX),
+                        y: min(max(0, origin.y), maxY)),
+                animated: true)
+        }
+        bridge.onCopy = { [weak self] text in
+            self?.flashStatus("Copied: \(text.prefix(60))")
         }
         bridge.setFormHost(scrollView)
 
@@ -114,6 +139,11 @@ final class BrowserViewController: UIViewController {
         reloadButton.addTarget(
             self, action: #selector(reload), for: .touchUpInside)
 
+        findButton.setImage(
+            UIImage(systemName: "magnifyingglass"), for: .normal)
+        findButton.addTarget(
+            self, action: #selector(toggleFindBar), for: .touchUpInside)
+
         addressField.borderStyle = .roundedRect
         addressField.font = .systemFont(ofSize: 14)
         addressField.autocapitalizationType = .none
@@ -130,12 +160,15 @@ final class BrowserViewController: UIViewController {
         titleLabel.lineBreakMode = .byTruncatingTail
 
         let bar = UIStackView(arrangedSubviews:
-            [backButton, addressField, spinner, reloadButton])
+            [backButton, addressField, spinner, findButton, reloadButton])
         bar.axis = .horizontal
         bar.spacing = 8
         bar.alignment = .center
 
-        let chrome = UIStackView(arrangedSubviews: [bar, titleLabel])
+        buildFindBar()
+
+        let chrome = UIStackView(arrangedSubviews:
+            [bar, findBar, titleLabel])
         chrome.axis = .vertical
         chrome.spacing = 2
 
@@ -183,6 +216,111 @@ final class BrowserViewController: UIViewController {
             target: self, action: #selector(handleTap(_:)))
         tap.delegate = self
         scrollView.addGestureRecognizer(tap)
+
+        let longPress = UILongPressGestureRecognizer(
+            target: self, action: #selector(handleLongPress(_:)))
+        longPress.delegate = self
+        scrollView.addGestureRecognizer(longPress)
+
+        let edgeSwipe = UIScreenEdgePanGestureRecognizer(
+            target: self, action: #selector(handleEdgeSwipe(_:)))
+        edgeSwipe.edges = .left
+        view.addGestureRecognizer(edgeSwipe)
+    }
+
+    private func buildFindBar() {
+        findField.borderStyle = .roundedRect
+        findField.font = .systemFont(ofSize: 14)
+        findField.autocapitalizationType = .none
+        findField.autocorrectionType = .no
+        findField.placeholder = "Find in page"
+        findField.returnKeyType = .search
+        findField.delegate = self
+
+        findStatus.font = .systemFont(ofSize: 11)
+        findStatus.textColor = .secondaryLabel
+
+        let prev = UIButton(type: .system)
+        prev.setImage(UIImage(systemName: "chevron.up"), for: .normal)
+        prev.addTarget(self, action: #selector(findPrev),
+                       for: .touchUpInside)
+        let next = UIButton(type: .system)
+        next.setImage(UIImage(systemName: "chevron.down"), for: .normal)
+        next.addTarget(self, action: #selector(findNext),
+                       for: .touchUpInside)
+        let done = UIButton(type: .system)
+        done.setTitle("Done", for: .normal)
+        done.addTarget(self, action: #selector(toggleFindBar),
+                       for: .touchUpInside)
+
+        findBar.axis = .horizontal
+        findBar.spacing = 8
+        findBar.alignment = .center
+        [findField, findStatus, prev, next, done].forEach {
+            findBar.addArrangedSubview($0)
+        }
+        findBar.isHidden = true
+    }
+
+    // MARK: - Find in page
+
+    @objc private func toggleFindBar() {
+        findBar.isHidden.toggle()
+        if findBar.isHidden {
+            bridge.resetFind()
+            findStatus.text = ""
+            findField.resignFirstResponder()
+        } else {
+            findField.becomeFirstResponder()
+        }
+    }
+
+    private func find(backwards: Bool) {
+        guard let key = findField.text, !key.isEmpty else { return }
+        let result = bridge.findText(
+            key, caseSensitive: false, backwards: backwards)
+        switch result {
+        case 0: findStatus.text = ""
+        case 1: findStatus.text = "wrapped"
+        default: findStatus.text = "not found"
+        }
+    }
+
+    @objc private func findNext() { find(backwards: false) }
+    @objc private func findPrev() { find(backwards: true) }
+
+    // MARK: - Gestures
+
+    @objc private func handleLongPress(_ gr: UILongPressGestureRecognizer) {
+        let p = gr.location(in: scrollView)
+        switch gr.state {
+        case .began:
+            // The drag extends the selection; it must not pan the page.
+            scrollView.isScrollEnabled = false
+            bridge.selectionBegan(x: Int32(p.x), y: Int32(p.y))
+        case .changed:
+            bridge.selectionMoved(x: Int32(p.x), y: Int32(p.y))
+        case .ended, .cancelled:
+            bridge.selectionEnded(x: Int32(p.x), y: Int32(p.y))
+            scrollView.isScrollEnabled = true
+        default:
+            break
+        }
+    }
+
+    @objc private func handleEdgeSwipe(_ gr: UIScreenEdgePanGestureRecognizer)
+    {
+        if gr.state == .ended {
+            goBack()
+        }
+    }
+
+    private func flashStatus(_ text: String) {
+        titleLabel.text = text
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+            [weak self] in
+            self?.titleLabel.text = ""
+        }
     }
 
     @objc private func keyboardChanged(_ note: Notification) {
@@ -273,10 +411,21 @@ final class BrowserViewController: UIViewController {
                 .replacingOccurrences(of: ">", with: "&gt;")
         }
         let html = """
-        <html><head><title>Error</title></head><body>
-        <h1>Can't load page</h1>
-        <p><b>\(esc(urlString))</b></p>
-        <p>\(esc(error.localizedDescription))</p>
+        <html><head><title>Error</title>
+        <style>
+          body { background-color: #ffffff; margin: 24px; }
+          .card { background-color: #fff4f2; padding: 12px;
+                  margin-top: 40px; }
+          h1 { color: #a33021; font-size: 1.4em; margin: 0 0 8px 0; }
+          .url { color: #666666; word-wrap: break-word; }
+          .msg { margin-top: 10px; }
+        </style></head><body>
+        <div class="card">
+        <h1>Can&#39;t load this page</h1>
+        <p class="url">\(esc(urlString))</p>
+        <p class="msg">\(esc(error.localizedDescription))</p>
+        </div>
+        <p><a href="\(esc(urlString))">Try again</a></p>
         </body></html>
         """
         bridge.clearCache()
@@ -308,6 +457,11 @@ final class BrowserViewController: UIViewController {
 extension BrowserViewController: UIScrollViewDelegate {
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
         renderView.canvasOrigin = scrollView.contentOffset
+        // Keep the engine's scroll position in sync (scroll-into-view
+        // calculations depend on it).
+        bridge.reportScroll(x:
+            Int32(scrollView.contentOffset.x),
+            y: Int32(scrollView.contentOffset.y))
     }
 }
 
@@ -325,6 +479,10 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
 
 extension BrowserViewController: UITextFieldDelegate {
     func textFieldShouldReturn(_ textField: UITextField) -> Bool {
+        if textField === findField {
+            find(backwards: false)
+            return true
+        }
         textField.resignFirstResponder()
         if let text = textField.text, !text.isEmpty {
             navigate(to: normalizeInput(text))
