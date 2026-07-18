@@ -20,6 +20,7 @@
 #include <string>
 #include <vector>
 #include <string.h>
+#include <objc/runtime.h>
 
 #include "AppleCoreTextPlatform.hh"
 #include "CoreGraphicsView.hh"
@@ -53,6 +54,53 @@ static void fillClickEvent (core::EventButton *event)
    event->state = (core::ButtonState) 0;
    event->button = 1;
    event->numPressed = 1;
+}
+
+/*
+ * UIButtonConfiguration ignores titleLabel.font; the font must ride in an
+ * attributed title (otherwise buttons render ~20pt while the engine sized
+ * them for 14pt and the label overflows the capsule).
+ */
+static void setButtonTitle (UIButton *button, const char *title)
+{
+   UIButtonConfiguration *conf = button.configuration;
+   NSAttributedString *attributed = [[NSAttributedString alloc]
+      initWithString:[NSString stringWithUTF8String:(title ? title : "")]
+          attributes:@{NSFontAttributeName:
+                          [UIFont systemFontOfSize:CTRL_FONT_SIZE]}];
+   conf.attributedTitle = attributed;
+   button.configuration = conf;
+}
+
+/*
+ * Collect the text content of a widget subtree (e.g. a <button>'s child
+ * HTML) — the same deep traversal selection/copy uses.
+ */
+static std::string extractText (core::Widget *widget)
+{
+   std::string out;
+
+   core::Iterator *i =
+      widget->iterator ((core::Content::Type)
+                        core::Content::maskForSelection (false), false);
+   if (i == NULL)
+      return out;
+   core::DeepIterator *di = new core::DeepIterator (i);
+   i->unref ();
+
+   while (di->next ()) {
+      core::Content *c = di->getContent ();
+      if (c->type & core::Content::TEXT) {
+         out += c->text;
+         if (c->space)
+            out += ' ';
+      }
+   }
+   delete di;
+
+   while (!out.empty () && out[out.size () - 1] == ' ')
+      out.erase (out.size () - 1);
+   return out;
 }
 
 /*
@@ -162,6 +210,29 @@ public:
       if (placeholder)
          f.placeholder = [NSString stringWithUTF8String:placeholder];
 
+      /* Autofill/keyboard hints. The resource API doesn't expose the
+       * input's name attribute, so the placeholder is the best signal. */
+      if (password) {
+         f.textContentType = UITextContentTypePassword;
+      } else if (placeholder) {
+         NSString *hint =
+            [[NSString stringWithUTF8String:placeholder] lowercaseString];
+         if ([hint containsString:@"email"] ||
+             [hint containsString:@"e-mail"]) {
+            f.textContentType = UITextContentTypeEmailAddress;
+            f.keyboardType = UIKeyboardTypeEmailAddress;
+         } else if ([hint containsString:@"user"] ||
+                    [hint containsString:@"login"]) {
+            f.textContentType = UITextContentTypeUsername;
+         } else if ([hint containsString:@"phone"] ||
+                    [hint containsString:@"tel"]) {
+            f.textContentType = UITextContentTypeTelephoneNumber;
+            f.keyboardType = UIKeyboardTypePhonePad;
+         } else if ([hint containsString:@"search"]) {
+            f.returnKeyType = UIReturnKeySearch;
+         }
+      }
+
       target = [FormControlTarget new];
       NativeEntryResource *self_ = this;
       target.onAction = ^{ self_->fireActivate (); };
@@ -236,6 +307,9 @@ public:
 
 // ----------------------------------------------------------------------
 
+class NativeLabelButtonResource;
+static NativeLabelButtonResource *lastLabelClick = NULL;
+
 class NativeLabelButtonResource:
    public NativeResource<ui::LabelButtonResource>
 {
@@ -261,10 +335,9 @@ public:
       UIButton *b = [UIButton buttonWithType:UIButtonTypeSystem];
       UIButtonConfiguration *conf =
          [UIButtonConfiguration grayButtonConfiguration];
-      conf.title = [NSString stringWithUTF8String:this->label.c_str ()];
       conf.contentInsets = NSDirectionalEdgeInsetsMake (2, 8, 2, 8);
       b.configuration = conf;
-      b.titleLabel.font = [UIFont systemFontOfSize:CTRL_FONT_SIZE];
+      setButtonTitle (b, this->label.c_str ());
 
       target = [FormControlTarget new];
       NativeLabelButtonResource *self_ = this;
@@ -275,8 +348,15 @@ public:
       attachControl (b);
    }
 
+   ~NativeLabelButtonResource ()
+   {
+      if (lastLabelClick == this)
+         lastLabelClick = NULL;
+   }
+
    void fireClicked ()
    {
+      lastLabelClick = this;
       core::EventButton event;
       fillClickEvent (&event);
       emitClicked (&event);
@@ -287,9 +367,19 @@ public:
    void setLabel (const char *label)
    {
       this->label = label ? label : "";
-      UIButtonConfiguration *conf = button ().configuration;
-      conf.title = [NSString stringWithUTF8String:this->label.c_str ()];
-      button ().configuration = conf;
+
+      /* File inputs set the picked path as the label; sandbox paths are
+       * enormous, so display only the basename. */
+      const char *shown = strrchr (this->label.c_str (), '/');
+      shown = shown ? shown + 1 : this->label.c_str ();
+      setButtonTitle (button (), shown);
+
+      CGSize size = [[NSString stringWithUTF8String:shown]
+         sizeWithAttributes:
+            @{NSFontAttributeName:
+                 [UIFont systemFontOfSize:CTRL_FONT_SIZE]}];
+      reqWidth = (int) size.width + 24;
+      queueResize (true);   // reflow around the new label
    }
 };
 
@@ -298,17 +388,27 @@ public:
 class NativeComplexButtonResource:
    public NativeResource<ui::ComplexButtonResource>
 {
+   /* The button's child HTML; kept for title extraction (the base class
+    * keeps its own copy privately). */
+   core::Widget *contentWidget;
+   bool titleExtracted;
+
 public:
    NativeComplexButtonResource (UIView *host, core::Widget *widget,
                                 bool relief):
       NativeResource<ui::ComplexButtonResource> (host, 80, CTRL_ASCENT,
                                                  CTRL_DESCENT)
    {
+      contentWidget = widget;
+      titleExtracted = false;
+
       UIButton *b = [UIButton buttonWithType:UIButtonTypeSystem];
       UIButtonConfiguration *conf = relief ?
          [UIButtonConfiguration grayButtonConfiguration] :
          [UIButtonConfiguration plainButtonConfiguration];
+      conf.contentInsets = NSDirectionalEdgeInsetsMake (2, 8, 2, 8);
       b.configuration = conf;
+      b.titleLabel.font = [UIFont systemFontOfSize:CTRL_FONT_SIZE];
 
       target = [FormControlTarget new];
       NativeComplexButtonResource *self_ = this;
@@ -318,6 +418,30 @@ public:
 
       attachControl (b);
       init (widget);
+   }
+
+   /* The child content is parsed after construction; by the time layout
+    * asks for our size (post-flush resizeIdle) it is complete, so the
+    * title is extracted lazily here and the button sized to it. */
+   void sizeRequest (core::Requisition *requisition)
+   {
+      if (!titleExtracted && contentWidget) {
+         std::string title = extractText (contentWidget);
+         if (!title.empty ()) {
+            titleExtracted = true;
+            setButtonTitle ((UIButton *) control, title.c_str ());
+
+            CGSize size = [[NSString stringWithUTF8String:title.c_str ()]
+               sizeWithAttributes:
+                  @{NSFontAttributeName:
+                       [UIFont systemFontOfSize:CTRL_FONT_SIZE]}];
+            reqWidth = (int) size.width + 28;
+            /* Our size changed after the embed may have cached it; make
+             * the engine re-request and re-allocate. */
+            queueResize (true);
+         }
+      }
+      NativeResource<ui::ComplexButtonResource>::sizeRequest (requisition);
    }
 
    void fireClicked ()
@@ -537,9 +661,7 @@ protected:
             title = items[i].title.c_str ();
             break;
          }
-      UIButtonConfiguration *conf = button ().configuration;
-      conf.title = [NSString stringWithUTF8String:title];
-      button ().configuration = conf;
+      setButtonTitle (button (), title);
    }
 
 public:
@@ -561,11 +683,10 @@ public:
       UIButton *b = [UIButton buttonWithType:UIButtonTypeSystem];
       UIButtonConfiguration *conf =
          [UIButtonConfiguration grayButtonConfiguration];
-      conf.title = @"—";
       conf.indicator = UIButtonConfigurationIndicatorPopup;
       conf.contentInsets = NSDirectionalEdgeInsetsMake (2, 8, 2, 8);
       b.configuration = conf;
-      b.titleLabel.font = [UIFont systemFontOfSize:CTRL_FONT_SIZE];
+      setButtonTitle (b, "\xe2\x80\x94");
       b.showsMenuAsPrimaryAction = YES;
 
       this->attachControl (b);
@@ -601,16 +722,120 @@ public:
    }
 };
 
-class NativeListResource:
-   public NativeSelectionResource<ui::ListResource>
+/*
+ * <select size=N> / multi-select as an inline, scrollable list of
+ * checkable rows (the popup menu is only used for dropdowns).
+ */
+class NativeListResource: public NativeResource<ui::ListResource>
 {
+   struct Item {
+      std::string title;
+      bool enabled;
+      bool selected;
+   };
+   std::vector<Item> items;
+   bool multiple;
+
+   static const int ROW_HEIGHT = 24, LIST_WIDTH = 170;
+
+   UIScrollView *list () { return (UIScrollView *) control; }
+
+   void rebuildRows ()
+   {
+      for (UIView *v in [list ().subviews copy])
+         [v removeFromSuperview];
+
+      for (size_t i = 0; i < items.size (); i++) {
+         UIButton *row = [UIButton buttonWithType:UIButtonTypeSystem];
+         UIButtonConfiguration *conf = items[i].selected ?
+            [UIButtonConfiguration tintedButtonConfiguration] :
+            [UIButtonConfiguration plainButtonConfiguration];
+         conf.image = [UIImage systemImageNamed:
+            (items[i].selected ? @"checkmark.square.fill" : @"square")];
+         conf.imagePadding = 6;
+         conf.contentInsets = NSDirectionalEdgeInsetsMake (0, 6, 0, 6);
+         conf.cornerStyle = UIButtonConfigurationCornerStyleFixed;
+         conf.background.cornerRadius = 0;
+         row.configuration = conf;
+         setButtonTitle (row, items[i].title.c_str ());
+         row.contentHorizontalAlignment =
+            UIControlContentHorizontalAlignmentLeft;
+         row.enabled = items[i].enabled ? YES : NO;
+         row.frame = CGRectMake (0, (CGFloat) i * ROW_HEIGHT,
+                                 LIST_WIDTH, ROW_HEIGHT);
+
+         FormControlTarget *rowTarget = [FormControlTarget new];
+         NativeListResource *self_ = this;
+         size_t index = i;
+         rowTarget.onAction = ^{ self_->itemPicked (index); };
+         /* keep the target alive with the row */
+         objc_setAssociatedObject (row, "dillo.target", rowTarget,
+                                   OBJC_ASSOCIATION_RETAIN);
+         [row addTarget:rowTarget action:@selector(fire)
+             forControlEvents:UIControlEventTouchUpInside];
+
+         [list () addSubview:row];
+      }
+      list ().contentSize =
+         CGSizeMake (LIST_WIDTH, (CGFloat) items.size () * ROW_HEIGHT);
+   }
+
 public:
    NativeListResource (UIView *host,
                        ui::ListResource::SelectionMode selectionMode,
                        int rows):
-      NativeSelectionResource<ui::ListResource>
-         (host, selectionMode == ui::ListResource::SELECTION_MULTIPLE)
+      NativeResource<ui::ListResource>
+         (host, LIST_WIDTH,
+          (rows > 0 ? rows : 3) * ROW_HEIGHT, CTRL_DESCENT)
    {
+      multiple = (selectionMode == ui::ListResource::SELECTION_MULTIPLE);
+
+      UIScrollView *v = [[UIScrollView alloc] init];
+      v.layer.borderWidth = 1;
+      v.layer.borderColor = [UIColor systemGray3Color].CGColor;
+      v.layer.cornerRadius = 5;
+      v.backgroundColor = [UIColor systemBackgroundColor];
+      attachControl (v);
+   }
+
+   void itemPicked (size_t index)
+   {
+      if (multiple) {
+         items[index].selected = !items[index].selected;
+      } else {
+         for (size_t i = 0; i < items.size (); i++)
+            items[i].selected = (i == index);
+      }
+      rebuildRows ();
+   }
+
+   void addItem (const char *str, bool enabled, bool selected)
+   {
+      Item item;
+      item.title = str ? str : "";
+      item.enabled = enabled;
+      item.selected = selected;
+      items.push_back (item);
+      rebuildRows ();
+   }
+
+   void setItem (int index, bool selected)
+   {
+      if (index >= 0 && (size_t) index < items.size ()) {
+         items[index].selected = selected;
+         rebuildRows ();
+      }
+   }
+
+   void pushGroup (const char *name, bool enabled) { }
+   void popGroup () { }
+
+   int getNumberOfItems () { return (int) items.size (); }
+
+   bool isSelected (int index)
+   {
+      return index >= 0 && (size_t) index < items.size () ?
+         items[index].selected : false;
    }
 };
 
@@ -683,6 +908,12 @@ public:
          (host, (NativeRadioButtonResource *) groupedWith, activated);
    }
 };
+
+void refireLastLabelClick ()
+{
+   if (lastLabelClick)
+      lastLabelClick->fireClicked ();
+}
 
 core::ui::ResourceFactory *createNativeResourceFactory (UIView *hostView)
 {

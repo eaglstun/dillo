@@ -29,6 +29,13 @@ namespace ios {
 core::ui::ResourceFactory *createNativeResourceFactory (UIView *hostView);
 void destroyNativeResourceFactory (core::ui::ResourceFactory *factory);
 
+/**
+ * Re-emit the click of the last label button the user tapped (used by the
+ * async file picker: the second click finds the picked path waiting).
+ * Safe no-op if that resource is gone (page navigated).
+ */
+void refireLastLabelClick ();
+
 } // namespace ios
 } // namespace dw
 
