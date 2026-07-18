@@ -1,10 +1,57 @@
 # Dillo iOS — Results
 
-**Status: it's a browser.** Milestone 1: the `dw/` engine renders styled,
-word-wrapped text on iOS through Core Text / Core Graphics with zero FLTK
-linked in. Milestone 2: the **real HTML parser and CSS engine** run on iOS
-against a hardcoded document. Milestone 3: **Dillo browses the live web on
-iOS** — address bar, HTTPS, external stylesheets, tappable links, history.
+**Status: it's a browser, with pictures.** Milestone 1: the `dw/` engine
+renders styled, word-wrapped text on iOS through Core Text / Core Graphics
+with zero FLTK linked in. Milestone 2: the **real HTML parser and CSS
+engine** run on iOS against a hardcoded document. Milestone 3: **Dillo
+browses the live web** — address bar, HTTPS, external stylesheets, tappable
+links, history. Milestone 4: **images** — async loading, ImageIO decode,
+the engine's own scaling — and enough form-widget robustness to survive the
+real web.
+
+## Milestone 4 — images (and surviving forms)
+
+![wikipedia](browser-wikipedia.png)
+
+Verified on live sites: the Dillo homepage renders its PNG screenshot
+thumbnails; Wikipedia's Armadillo article renders **styled** (serif display
+title, bordered taxobox, the geological time-range chips — all real CSS
+through the cascade) with the nine-banded armadillo JPEG decoded and drawn
+in place. SVG images degrade to alt text (ImageIO has no SVG decoder).
+
+What was built:
+
+- **`AppleImgbuf`** (`ios/engine/AppleImgbuf.{hh,cc}`): a port of
+  `dw/fltkimgbuf.cc` — root + scaled buffers, gamma-aware averaging
+  scaler, reference counting — with `draw()` wrapping the raw RGB rows in
+  a CGImage (local y-flip, nearest-neighbor since rows are pre-scaled).
+  `ApplePlatform::createImgbuf` and `CoreGraphicsView::drawImage` now do
+  real work; `src/imgbuf.cc` joins the compile set.
+- **Async image pipeline**: `a_Capi_open_url` recognizes image webs and
+  hands them (with a client key for bw's progress bookkeeping) to the
+  shell via a new `ImageFetchHook`. The bridge fetches with URLSession;
+  on completion `dw::ios::deliverImageData` decodes via ImageIO,
+  composites alpha over the image's `bg_color`, and drives the DilloImage
+  state machine exactly as the desktop dicache does (`a_Imgbuf_new` →
+  `set_parms` → per-row `a_Imgbuf_update` + `a_Image_write` → `close`).
+  Pages render first; images pop in as they arrive — real browser
+  behavior. Pending fetches are cancelled on navigation (web validity
+  guarded the same way capi's ValidWebs list works).
+- **`StubResources`** (`ios/engine/StubResources.{hh,cc}`): display-only
+  form widgets. The milestone-2 assumption that the resource factory was
+  "unreached" died on contact with Wikipedia's search `<input>` (NULL
+  deref in `Embed`); every resource type now returns a real, fixed-size,
+  draw-nothing object. The complex-button resource attaches a contextless
+  `CoreGraphicsView` to its inner layout — `Layout::queueResize`
+  dereferences the view, so "no view" is not an option.
+- **Entity decoding in the CSS prefetcher**: Wikipedia's stylesheet URLs
+  contain `&amp;`; the parser entity-decodes hrefs before resolving, so
+  the prefetch cache keys have to match that form or every lookup misses
+  (which is why Wikipedia first rendered unstyled).
+
+Known image gaps: srcset/lazy-loaded images whose real URL never appears
+in `src` don't load; no SVG; no progressive/partial rendering (each image
+appears complete when its fetch finishes); no image cache across pages.
 
 ## Milestone 3 — a real browser
 
