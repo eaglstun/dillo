@@ -145,6 +145,19 @@ final class PageLoader {
         }
     }
 
+    /// Minimal entity decoding for attribute values: the parser sees
+    /// entity-decoded hrefs, so cache keys must match that form.
+    static func decodeEntities(_ s: String) -> String {
+        guard s.contains("&") else { return s }
+        return s
+            .replacingOccurrences(of: "&amp;", with: "&")
+            .replacingOccurrences(of: "&lt;", with: "<")
+            .replacingOccurrences(of: "&gt;", with: ">")
+            .replacingOccurrences(of: "&quot;", with: "\"")
+            .replacingOccurrences(of: "&#39;", with: "'")
+            .replacingOccurrences(of: "&#038;", with: "&")
+    }
+
     /// hrefs of <link rel=stylesheet> tags, in document order.
     static func stylesheetHrefs(in html: String) -> [String] {
         matches(linkRe, html).compactMap { m -> String? in
@@ -153,7 +166,7 @@ final class PageLoader {
             guard relStylesheetRe.firstMatch(in: tag, range: tagRange) != nil,
                   let href = matches(hrefRe, tag).first
             else { return nil }
-            return href[2] ?? href[3] ?? href[4]
+            return (href[2] ?? href[3] ?? href[4]).map(decodeEntities)
         }
     }
 
