@@ -1,7 +1,53 @@
 # Dillo iOS Renderer Spike — Result
 
-**Status: SUCCESS.** The `dw/` engine renders styled, word-wrapped text on iOS
-through Core Text / Core Graphics with zero FLTK linked in.
+**Status: SUCCESS, twice over.** Milestone 1: the `dw/` engine renders
+styled, word-wrapped text on iOS through Core Text / Core Graphics with zero
+FLTK linked in. Milestone 2: the **real HTML parser and CSS engine**
+(`src/html.cc` → `src/styleengine.cc` → `src/css*.cc`) run on iOS and render
+a full HTML document with a stylesheet.
+
+## Milestone 2 — real HTML/CSS parser
+
+![html result](spike-html-result.png)
+
+The bridge no longer hand-builds a Textblock; it heap-copies a hardcoded
+HTML document and feeds it to `DilloHtml::write()`. Everything visible went
+through the genuine parser stack and cascade (user-agent stylesheet +
+`<style>` block + inline classes): styled `h1`, class selectors, b/i/u/s,
+`<mark>` backgrounds, **small-caps**, link styling, character entities and
+UTF-8, nested ul/ol with bullets and numbering, an indented blockquote with
+background, `<hr>`, a bordered table with `th` styling and per-cell
+alignment/color, and monospace `<pre>`.
+
+What it took (all in `ios/`, no engine or parser source changed):
+
+- **Compile set** (`project.yml`): `html.cc css.cc cssparser.cc
+styleengine.cc table.cc form.cc image.cc bw.c misc.c colors.c url.c
+prefs.c klist.c bitvec.c history.c` — all compiled unmodified.
+- **`engine/utf8_ios.cc`** replaces `src/utf8.cc` (which wraps FLTK's
+  `fl_utf8*`): a faithful port of `fl_utf8decode` including its CP1252
+  fallback for illegal bytes, which the tag-soup parser depends on.
+- **`engine/BrowserStubs.cc`** satisfies the 26 link-time symbols from the
+  browser shell: `a_Capi_*` (report "not cached / can't fetch"),
+  `a_UIcmd_*` (no-op), `a_Web_new/free` (data half of web.cc),
+  `a_Dialog_choice`, `a_Hsts_require_https`.
+- **`config.h`**: `#define inbuf_t char` (the configure-time iconv probe);
+  the app links `libiconv.tbd` for form.cc.
+- **Bridge init** mirrors `dillo.cc`'s order (`a_Prefs_init`, `a_Web_init`,
+  `a_Bw_init`, `StyleEngine::init`) and `web.cc`'s RootUrl dispatch block
+  (canvas bg color, initial "body" style, `layout->setWidget`). Font prefs
+  are swapped to iOS families (Georgia / Helvetica Neue / Courier New).
+
+**The one crash along the way is the most useful lesson for the next
+milestone:** `Html_write_raw` tokenizes its input buffer **in place** and
+`DilloHtml` retains the pointer (`Start_Buf`) after parsing. Feeding it a
+string literal SIGBUSes; the buffer must be writable heap memory that
+outlives the parser — the desktop cache layer guarantees exactly this, so
+whatever replaces it on iOS must too.
+
+---
+
+# Milestone 1 — engine + Core Text (original spike)
 
 ![spike result](spike-result.png)
 

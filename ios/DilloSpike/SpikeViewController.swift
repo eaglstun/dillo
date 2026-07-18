@@ -22,19 +22,16 @@ final class DilloCanvasView: UIView {
     }
 }
 
-/// Hosts the engine canvas. The fixed narrow width (200 pt, same as the
-/// desktop dw_example window) forces obvious word wrapping. The scroll view
-/// is plain UIKit chrome — the engine draws its whole canvas and does no
-/// scrolling of its own (View::usesViewport() is false).
+/// Hosts the engine canvas at full device width. The scroll view is plain
+/// UIKit chrome — the engine draws its whole canvas and does no scrolling
+/// of its own (View::usesViewport() is false).
 final class SpikeViewController: UIViewController {
-    private static let canvasWidth = 200
-
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .systemGray5
 
         let bridge = SpikeBridge(
-            viewportWidth: Int32(Self.canvasWidth),
+            viewportWidth: Int32(view.bounds.width),
             height: Int32(view.bounds.height)
         )
 
