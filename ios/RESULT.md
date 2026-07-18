@@ -1,12 +1,56 @@
-# Dillo iOS Renderer Spike — Result
+# Dillo iOS — Results
 
-**Status: SUCCESS, twice over.** Milestone 1: the `dw/` engine renders
-styled, word-wrapped text on iOS through Core Text / Core Graphics with zero
-FLTK linked in. Milestone 2: the **real HTML parser and CSS engine**
-(`src/html.cc` → `src/styleengine.cc` → `src/css*.cc`) run on iOS and render
-a full HTML document with a stylesheet.
+**Status: it's a browser.** Milestone 1: the `dw/` engine renders styled,
+word-wrapped text on iOS through Core Text / Core Graphics with zero FLTK
+linked in. Milestone 2: the **real HTML parser and CSS engine** run on iOS
+against a hardcoded document. Milestone 3: **Dillo browses the live web on
+iOS** — address bar, HTTPS, external stylesheets, tappable links, history.
 
-## Milestone 2 — real HTML/CSS parser
+## Milestone 3 — a real browser
+
+![home](browser-home.png) ![user manual](browser-user-manual.png)
+
+Verified in the simulator against live sites: `dillo-browser.github.io`
+loads over HTTPS with its real stylesheet applied (the yellow notice box,
+link styling); tapping "user manual" hit-tests through the engine
+(`Layout::buttonPress/Release` → `HtmlLinkReceiver::click` →
+`a_UIcmd_open_url` → shell hook) and navigates to `user_help.html` with
+title and history updated; the back button returns; typing `example.com`
+in the address bar normalizes, loads, and renders. Images are off
+(`prefs.load_images = FALSE`) pending an Imgbuf implementation, so `[IMG]`
+alt placeholders appear — authentically Dillo.
+
+### Architecture (what replaced what)
+
+| Desktop                                   | iOS                                                                                                                                                                                                                                                                                                        |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/IO/` sockets + TLS + `select()` loop | `URLSession` (`PageLoader.swift`)                                                                                                                                                                                                                                                                          |
+| `cache.c`/`capi.c` streaming cache        | prefetch + mini-cache (`IosCapi.cc`): the shell fetches the page **and its stylesheets** (link scan + recursive `@import`, resolved via dillo's own `url.c` so cache keys match the parser) _before_ parsing, then the parser's cached-CSS fast path in `a_Html_load_stylesheet` serves them synchronously |
+| `uicmd.cc` (FLTK UI commands)             | hook registry (`IosShell.hh`): `a_UIcmd_open_url` / `set_page_title` dispatch to Swift blocks                                                                                                                                                                                                              |
+| `nav.c` history (cache-coupled)           | app-side URL list in `BrowserViewController`                                                                                                                                                                                                                                                               |
+| FLTK viewport scrolling                   | `UIScrollView` physics + visible-rect expose: the render view stays screen-sized and `drawIntoContext:visibleRect:` translates the CTM by the scroll offset, so tall pages cost no backing store                                                                                                           |
+| FLTK mouse events                         | `UITapGestureRecognizer` → `Layout::buttonPress/buttonRelease` with `BUTTON1_MASK` — the engine's real link hit-testing and click signal                                                                                                                                                                   |
+
+Charset handling: HTTP header → `<meta>` sniff → UTF-8 → Latin-1, decoded
+in Swift; the parser is always fed UTF-8 (content type says so).
+
+One layout per app lifetime, one `DilloHtml` per page —
+`Layout::setWidget` frees the old page (and its retained parse buffer is
+freed only after the swap, per the milestone-2 lesson).
+
+### Known gaps (next milestones)
+
+- **Images**: needs an `Imgbuf` implementation (decode via CGImage) plus
+  image fetches in the prefetch pass or an async repaint path.
+- Pages wider than the viewport wrap at their min-width and pan
+  horizontally (correct engine behavior; a zoom gesture would help).
+- No cookies, form submission, find-in-page, tabs, or fragment scrolling.
+- Stylesheet fetches the regex scan misses (e.g. JS-injected) are simply
+  absent — same as desktop Dillo with CSS off for those sheets.
+
+---
+
+# Milestone 2 — real HTML/CSS parser (hardcoded page)
 
 ![html result](spike-html-result.png)
 
@@ -65,11 +109,11 @@ was the question the spike existed to answer.
 ```sh
 cd ios
 xcodegen generate          # produces DilloSpike.xcodeproj from project.yml
-xcodebuild -project DilloSpike.xcodeproj -scheme DilloSpike \
+xcodebuild -project DilloSpike.xcodeproj -scheme Dillo \
   -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=18.4' build
 ```
 
-Or open the generated project in Xcode and run the `DilloSpike` scheme.
+Or open the generated project in Xcode and run the `Dillo` scheme.
 The `.xcodeproj` is generated — `project.yml` is the source of truth.
 
 ## What was built
