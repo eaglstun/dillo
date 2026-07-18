@@ -10,6 +10,40 @@ the engine's own scaling. Milestone 5: **interactive forms** — native
 UIKit controls driven by the engine's layout, GET and POST submission
 through dillo's own `form.cc`.
 
+## Milestone 5.5 — form completeness (the M6.5 list)
+
+![file upload](browser-form-file.png)
+
+All four gaps from the forms milestone closed, verified live:
+
+- **`<button>` labels**: the child HTML's text is extracted with the same
+  deep widget-tree traversal selection uses (`DeepIterator`, lazily at
+  first post-parse `sizeRequest`), the native button is retitled and
+  resized, and `queueResize(true)` reflows the page around it. httpbingo's
+  submit now reads "Submit order". (Fun fact: `UIButtonConfiguration`
+  ignores `titleLabel.font`; the 14 pt font must ride in an attributed
+  title or buttons render ~20 pt and overflow their engine-computed
+  frames.)
+- **File upload works end to end**: File selector → `UIDocumentPicker`
+  (asCopy) → picked file read by `form.cc`'s own `readFile` → multipart
+  POST to httpbingo echoing the boundary and body. Design note: UIKit
+  will not complete a presentation while a touch event is held up, so the
+  desktop's blocking-modal model (nested run loop) is impossible — the
+  picker runs async in two phases: the first click presents and returns
+  NULL; picking stores the path and re-fires the same button's click,
+  whose `a_UIcmd_select_file` call then consumes the stored path inside
+  dillo's unmodified flow. Button labels show the basename (sandbox
+  paths are comically long). The app's Documents folder is exposed to
+  Files (`UIFileSharingEnabled`) so the picker has somewhere local.
+- **Inline multi-select lists**: `<select multiple/size=N>` renders as a
+  bordered, scrollable list of checkable rows (toggling verified);
+  dropdowns keep the popup menu.
+- **Autofill hints**: password fields get `.password`; placeholder
+  heuristics map email/username/phone to `textContentType` and keyboard
+  types.
+
+Also new: `data:` URLs load (handy for testing forms without a server).
+
 ## Milestone 5 — interactive forms
 
 ![search](browser-ddg-search.png) ![form](browser-form-filled.png)

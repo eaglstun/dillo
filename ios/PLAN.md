@@ -89,15 +89,14 @@ Remaining form gaps live in M6.5 below.
 - CGImage caching inside `AppleImgbuf::draw` (currently rebuilt per
   paint; cache and invalidate on `copyRow`).
 
-### M6.5 — Form completeness
+### ~~M6.5 — Form completeness~~ (done)
 
-- `<button>` labels: the ComplexButton child HTML isn't painted (blank
-  native button today). Either render the child layout into a small
-  canvas view, or extract the button's text content for the title.
-- File uploads (`<input type=file>`): UIDocumentPicker + multipart wiring
-  (the multipart encoder in form.cc already works).
-- Inline multi-select lists (currently a popup menu with checkmarks).
-- Autofill/password-manager integration (`textContentType` hints).
+All four shipped and verified live (see `RESULT.md`): button titles via
+DeepIterator text extraction, async two-phase file upload through
+UIDocumentPicker (nested-runloop modals are impossible on iOS — the
+pick re-fires the button click), inline checkable multi-select lists,
+and placeholder-based autofill hints. `data:` URLs load for form
+testing.
 
 ### M7 — Zoom + wide pages
 
