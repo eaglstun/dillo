@@ -41,6 +41,13 @@ NS_ASSUME_NONNULL_BEGIN
 /// The parser saw <title>.
 @property (nonatomic, copy, nullable) void (^onTitle)(NSString *title);
 
+/// The engine wants the viewport scrolled (anchor jump, find-in-page,
+/// scroll-into-view). Canvas coordinates.
+@property (nonatomic, copy, nullable) void (^onScrollTo)(CGPoint origin);
+
+/// Text was selected and copied (already on the pasteboard) — for UI hints.
+@property (nonatomic, copy, nullable) void (^onCopy)(NSString *text);
+
 /// Resolve href against a base URL with dillo's own url.c (so cache keys
 /// match what the parser computes for the same href). Returns absolute URL.
 - (nullable NSString *)resolveURL:(NSString *)href baseURL:(NSString *)base;
@@ -59,6 +66,30 @@ NS_ASSUME_NONNULL_BEGIN
 
 /// Deliver a tap at canvas coordinates (engine hit-tests links).
 - (void)tapAtX:(int)x y:(int)y;
+
+/// Long-press selection gesture, forwarded as engine mouse events
+/// (press starts a selection, motion extends it, release copies it).
+- (void)selectionBeganAtX:(int)x y:(int)y
+   NS_SWIFT_NAME(selectionBegan(x:y:));
+- (void)selectionMovedToX:(int)x y:(int)y
+   NS_SWIFT_NAME(selectionMoved(x:y:));
+- (void)selectionEndedAtX:(int)x y:(int)y
+   NS_SWIFT_NAME(selectionEnded(x:y:));
+
+/// The user scrolled; keeps the engine's scroll position in sync (used
+/// by scroll-into-view calculations).
+- (void)reportScrollX:(int)x y:(int)y NS_SWIFT_NAME(reportScroll(x:y:));
+
+/// If urlString points into the CURRENT page (same document, different
+/// #fragment), scroll to the anchor and return YES; else return NO and
+/// the caller performs a normal load.
+- (BOOL)navigateFragment:(NSString *)urlString;
+
+/// Find-in-page. Result: 0 = found, 1 = wrapped (restarted from top),
+/// 2 = not found. resetFind clears highlights and restarts.
+- (int)findText:(NSString *)key caseSensitive:(BOOL)caseSens
+       backwards:(BOOL)backwards;
+- (void)resetFind;
 
 /// Paint the given canvas-coordinate rect into a UIKit-oriented context
 /// whose origin corresponds to the rect's origin (i.e. the visible slice).

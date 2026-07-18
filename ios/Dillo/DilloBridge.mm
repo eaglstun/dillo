@@ -79,6 +79,7 @@
    UIView *_formHost;
    std::string _selectedFilePath;   // storage backing a_UIcmd_select_file
    BOOL _haveSelectedFile;
+   DilloUrl *_currentPageUrl;       // for same-document fragment checks
 }
 
 static void invalidateTrampoline (void *data)
@@ -86,6 +87,22 @@ static void invalidateTrampoline (void *data)
    DilloBridge *self = (__bridge DilloBridge *)data;
    if (self.onInvalidate)
       self.onInvalidate ();
+}
+
+static void scrollToTrampoline (void *data, int x, int y)
+{
+   DilloBridge *self = (__bridge DilloBridge *)data;
+   if (self.onScrollTo)
+      self.onScrollTo (CGPointMake (x, y));
+}
+
+static void copyTrampoline (void *ctx, const char *text)
+{
+   DilloBridge *self = (__bridge DilloBridge *)ctx;
+   NSString *s = [NSString stringWithUTF8String:text];
+   [UIPasteboard generalPasteboard].string = s;
+   if (self.onCopy)
+      self.onCopy (s);
 }
 
 static void openUrlTrampoline (void *ctx, const DilloUrl *url)
@@ -188,6 +205,7 @@ static void initDilloOnce (void)
 
    _view = new dw::apple::CoreGraphicsView ();
    _view->setInvalidateFunc (invalidateTrampoline, (__bridge void *)self);
+   _view->setScrollToFunc (scrollToTrampoline, (__bridge void *)self);
    _layout->attachView (_view);
 
    _bw = a_Bw_new ();
@@ -205,7 +223,7 @@ static void initDilloOnce (void)
 
    dw::ios::setShellHooks (openUrlTrampoline, titleTrampoline,
                            imageFetchTrampoline, selectFileTrampoline,
-                           (__bridge void *)self);
+                           copyTrampoline, (__bridge void *)self);
 
    return self;
 }
@@ -323,11 +341,13 @@ static void initDilloOnce (void)
 - (void)dealloc
 {
    [self cancelPendingImages];
-   dw::ios::setShellHooks (NULL, NULL, NULL, NULL, NULL);
+   dw::ios::setShellHooks (NULL, NULL, NULL, NULL, NULL, NULL);
    delete _layout;   // deletes platform, view, widget tree → DilloHtml
    a_Bw_free (_bw);
    dFree (_pageBuf);
    dFree (_oldPageBuf);
+   if (_currentPageUrl)
+      a_Url_free (_currentPageUrl);
    if (_formFactory)
       dw::ios::destroyNativeResourceFactory (_formFactory);
 }
@@ -394,6 +414,15 @@ static void initDilloOnce (void)
    _oldPageBuf = _pageBuf;   // becomes "previous" on the next load
    _pageBuf = NULL;
 
+   if (_currentPageUrl)
+      a_Url_free (_currentPageUrl);
+   _currentPageUrl = a_Url_dup (url);
+
+   /* Deep links: page.html#section scrolls once layout settles. */
+   const char *fragment = URL_FRAGMENT_ (url);
+   if (fragment && *fragment)
+      _layout->setAnchor (fragment);
+
    a_Url_free (url);
 
    _platform->runIdles ();
@@ -412,9 +441,68 @@ static void initDilloOnce (void)
 
 - (void)tapAtX:(int)x y:(int)y
 {
-   NSLog (@"DilloBridge: tap at canvas (%d, %d)", x, y);
    _layout->buttonPress (_view, 1, x, y, dw::core::BUTTON1_MASK, 1);
    _layout->buttonRelease (_view, 1, x, y, dw::core::BUTTON1_MASK, 1);
+}
+
+- (void)selectionBeganAtX:(int)x y:(int)y
+{
+   _layout->buttonPress (_view, 1, x, y, dw::core::BUTTON1_MASK, 1);
+}
+
+- (void)selectionMovedToX:(int)x y:(int)y
+{
+   _layout->motionNotify (_view, x, y, dw::core::BUTTON1_MASK);
+}
+
+- (void)selectionEndedAtX:(int)x y:(int)y
+{
+   _layout->buttonRelease (_view, 1, x, y, dw::core::BUTTON1_MASK, 1);
+}
+
+- (void)reportScrollX:(int)x y:(int)y
+{
+   _layout->scrollPosChanged (_view, x, y);
+}
+
+- (BOOL)navigateFragment:(NSString *)urlString
+{
+   if (!_currentPageUrl)
+      return NO;
+
+   DilloUrl *target = a_Url_new ([urlString UTF8String], NULL);
+   if (!target)
+      return NO;
+
+   const char *fragment = URL_FRAGMENT_ (target);
+   /* Same document? Compare everything except the fragment. */
+   BOOL same = fragment && *fragment &&
+      a_Url_cmp (_currentPageUrl, target) == 0;
+   if (same) {
+      _layout->setAnchor (fragment);
+      _platform->runIdles ();
+   }
+   a_Url_free (target);
+   return same;
+}
+
+- (int)findText:(NSString *)key caseSensitive:(BOOL)caseSens
+      backwards:(BOOL)backwards
+{
+   dw::core::FindtextState::Result result =
+      _layout->search ([key UTF8String], caseSens ? true : false,
+                       backwards ? true : false);
+   _platform->runIdles ();
+   if (self.onInvalidate)
+      self.onInvalidate ();
+   return (int) result;
+}
+
+- (void)resetFind
+{
+   _layout->resetSearch ();
+   if (self.onInvalidate)
+      self.onInvalidate ();
 }
 
 - (int)canvasWidth
