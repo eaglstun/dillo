@@ -20,10 +20,14 @@ namespace apple {
 /**
  * \brief A dw::core::View that paints into a CGContextRef.
  *
- * No viewport (usesViewport() is false): the whole canvas is drawn, canvas
- * coordinates equal context coordinates. The context is only valid during a
- * paint pass; the app shell sets it (setCGContext) around Layout::expose and
- * clears it afterwards. The context is expected in UIKit orientation (origin
+ * Reports usesViewport() so the engine's scrolling machinery (anchors,
+ * find-in-page, scroll-into-view) is active; the actual scrolling is done
+ * by the shell's UIScrollView, driven through the scrollTo hook, and the
+ * shell reports user scrolling back via Layout::scrollPosChanged. Canvas
+ * coordinates equal context coordinates (the shell translates the CTM for
+ * the visible slice). The context is only valid during a paint pass; the
+ * app shell sets it (setCGContext) around Layout::expose and clears it
+ * afterwards. The context is expected in UIKit orientation (origin
  * top-left, y down), as handed to -[UIView drawRect:].
  */
 class CoreGraphicsView: public core::View
@@ -39,6 +43,11 @@ private:
    void (*invalidateFunc) (void *data);
    void *invalidateData;
 
+   /* App-shell hook for engine-driven scrolling (anchors, find-in-page,
+    * scroll-into-view): the shell moves its UIScrollView. */
+   void (*scrollToFunc) (void *data, int x, int y);
+   void *scrollToData;
+
    void setStrokeColor (core::style::Color *color,
                         core::style::Color::Shading shading);
    void setFillColor (core::style::Color *color,
@@ -53,6 +62,8 @@ public:
 
    void setCGContext (CGContextRef cg);
    void setInvalidateFunc (void (*func) (void *data), void *data);
+   void setScrollToFunc (void (*func) (void *data, int x, int y),
+                         void *data);
 
    int getCanvasWidth () { return canvasWidth; }
    int getCanvasHeight () { return canvasAscent + canvasDescent; }

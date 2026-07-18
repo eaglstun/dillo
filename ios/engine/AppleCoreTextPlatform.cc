@@ -21,6 +21,7 @@
 #include "AppleCoreTextPlatform.hh"
 #include "AppleImgbuf.hh"
 #include "StubResources.hh"
+#include "IosShell.hh"
 
 namespace dw {
 namespace apple {
@@ -559,6 +560,9 @@ core::Imgbuf *ApplePlatform::createImgbuf (core::Imgbuf::Type type,
 
 void ApplePlatform::copySelection (const char *text, int destination)
 {
+   /* Both "destinations" (primary selection / clipboard) map to the one
+    * iOS pasteboard, via the shell. */
+   dw::ios::dispatchCopy (text);
 }
 
 core::ui::ResourceFactory *ApplePlatform::getResourceFactory ()

@@ -34,6 +34,8 @@ CoreGraphicsView::CoreGraphicsView ()
    bgColor = 0xffffff;
    invalidateFunc = NULL;
    invalidateData = NULL;
+   scrollToFunc = NULL;
+   scrollToData = NULL;
 }
 
 CoreGraphicsView::~CoreGraphicsView ()
@@ -50,6 +52,14 @@ void CoreGraphicsView::setInvalidateFunc (void (*func) (void *data),
 {
    invalidateFunc = func;
    invalidateData = data;
+}
+
+void CoreGraphicsView::setScrollToFunc (void (*func) (void *data,
+                                                      int x, int y),
+                                        void *data)
+{
+   scrollToFunc = func;
+   scrollToData = data;
 }
 
 static inline void setCGColor (CGContextRef cg, int rgb, bool fill)
@@ -111,10 +121,12 @@ void CoreGraphicsView::clearBackground (int x, int y, int width, int height)
 
 bool CoreGraphicsView::usesViewport ()
 {
-   return false;
+   /* True so Layout's scrolling machinery (anchors, find-in-page,
+    * scroll-into-view) runs; the shell's UIScrollView does the moving. */
+   return true;
 }
 
-/* Not called when usesViewport() is false. */
+/* No native scrollbars: they take no space. */
 
 int CoreGraphicsView::getHScrollbarThickness ()
 {
@@ -133,12 +145,15 @@ int CoreGraphicsView::getScrollbarOnLeft ()
 
 void CoreGraphicsView::scrollTo (int x, int y)
 {
+   if (scrollToFunc)
+      scrollToFunc (scrollToData, x, y);
 }
 
 void CoreGraphicsView::setViewportSize (int width, int height,
                                         int hScrollbarThickness,
                                         int vScrollbarThickness)
 {
+   /* The UIScrollView's size is managed by the shell. */
 }
 
 void CoreGraphicsView::startDrawing (core::Rectangle *area)

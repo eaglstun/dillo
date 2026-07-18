@@ -38,16 +38,18 @@ static OpenUrlHook openUrlHook = NULL;
 static TitleHook titleHook = NULL;
 static ImageFetchHook imageFetchHook = NULL;
 static SelectFileHook selectFileHook = NULL;
+static CopyHook copyHook = NULL;
 static void *hookCtx = NULL;
 
 void setShellHooks (OpenUrlHook openUrl, TitleHook title,
                     ImageFetchHook imageFetch, SelectFileHook selectFile,
-                    void *ctx)
+                    CopyHook copy, void *ctx)
 {
    openUrlHook = openUrl;
    titleHook = title;
    imageFetchHook = imageFetch;
    selectFileHook = selectFile;
+   copyHook = copy;
    hookCtx = ctx;
 }
 
@@ -74,6 +76,12 @@ bool dispatchImageFetch (DilloWeb *web, int clientKey)
 const char *dispatchSelectFile ()
 {
    return selectFileHook ? selectFileHook (hookCtx) : NULL;
+}
+
+void dispatchCopy (const char *text)
+{
+   if (copyHook && text)
+      copyHook (hookCtx, text);
 }
 
 } // namespace ios

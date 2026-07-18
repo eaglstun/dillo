@@ -46,16 +46,21 @@ typedef void (*ImageFetchHook) (void *ctx, DilloWeb *web, int clientKey);
  */
 typedef const char *(*SelectFileHook) (void *ctx);
 
+/** Selected text should reach the system pasteboard. */
+typedef void (*CopyHook) (void *ctx, const char *text);
+
 /** Register the app-shell callbacks (pass NULLs to clear). */
 void setShellHooks (OpenUrlHook openUrl, TitleHook title,
                     ImageFetchHook imageFetch, SelectFileHook selectFile,
-                    void *ctx);
+                    CopyHook copy, void *ctx);
 
-/* Called by the a_UIcmd_* stubs in BrowserStubs.cc / IosCapi.cc. */
+/* Called by the a_UIcmd_* stubs in BrowserStubs.cc / IosCapi.cc,
+ * and by ApplePlatform::copySelection. */
 void dispatchOpenUrl (const DilloUrl *url);
 void dispatchTitle (const char *title);
 bool dispatchImageFetch (DilloWeb *web, int clientKey);
 const char *dispatchSelectFile ();
+void dispatchCopy (const char *text);
 
 /**
  * Decode fetched image bytes (any ImageIO format) and feed them into the
