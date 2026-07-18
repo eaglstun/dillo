@@ -1,5 +1,5 @@
 /*
- * Dillo iOS spike — Objective-C bridge around the dw engine.
+ * Dillo iOS — Objective-C bridge around the dw engine + parser.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -12,26 +12,49 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-/// Owns a dw::core::Layout with an ApplePlatform and a CoreGraphicsView,
-/// builds the dw_example test page (ten wrapping paragraphs), and paints it
-/// into whatever CGContext the canvas view hands over.
-@interface SpikeBridge : NSObject
+/// Owns one dw::core::Layout (ApplePlatform + CoreGraphicsView) — the iOS
+/// equivalent of a desktop browser window — and creates a fresh DilloHtml
+/// per page load. The Swift shell fetches; the bridge parses and paints.
+@interface DilloBridge : NSObject
 
-/// Build the layout for a canvas of the given width (points). Wrapping
-/// happens against this width. Height is only an initial viewport hint.
 - (instancetype)initWithViewportWidth:(int)width height:(int)height;
 
-/// Canvas size the engine settled on after layouting (height grows with
-/// the content; width normally equals the viewport width).
+/// Engine-computed canvas size after layout (height grows with content).
 @property (nonatomic, readonly) int canvasWidth;
 @property (nonatomic, readonly) int canvasHeight;
 
-/// Called when the engine queues a redraw (e.g. from a late resize).
+/// Engine queued a redraw (reflow, late resize). Also a good moment for the
+/// shell to re-read canvasHeight.
 @property (nonatomic, copy, nullable) void (^onInvalidate)(void);
 
-/// Paint the full canvas into a UIKit-oriented context (top-left origin),
-/// as obtained inside -[UIView drawRect:].
-- (void)drawIntoContext:(CGContextRef)ctx;
+/// A link was activated (tap on <a>). Absolute URL string.
+@property (nonatomic, copy, nullable) void (^onOpenURL)(NSString *url);
+
+/// The parser saw <title>.
+@property (nonatomic, copy, nullable) void (^onTitle)(NSString *title);
+
+/// Resolve href against a base URL with dillo's own url.c (so cache keys
+/// match what the parser computes for the same href). Returns absolute URL.
+- (nullable NSString *)resolveURL:(NSString *)href baseURL:(NSString *)base;
+
+/// Drop all cached subresources (start of a page load).
+- (void)clearCache;
+
+/// Seed a fetched stylesheet (UTF-8 text) under its absolute URL.
+- (void)seedCSS:(NSString *)cssText forURL:(NSString *)url;
+
+/// Parse and lay out a UTF-8 HTML document. Replaces the current page.
+- (void)loadHTML:(NSString *)html url:(NSString *)url;
+
+/// Reflow the current page for a new viewport (e.g. rotation).
+- (void)setViewportWidth:(int)width height:(int)height;
+
+/// Deliver a tap at canvas coordinates (engine hit-tests links).
+- (void)tapAtX:(int)x y:(int)y;
+
+/// Paint the given canvas-coordinate rect into a UIKit-oriented context
+/// whose origin corresponds to the rect's origin (i.e. the visible slice).
+- (void)drawIntoContext:(CGContextRef)ctx visibleRect:(CGRect)rect;
 
 @end
 

@@ -64,23 +64,29 @@ targets:
           - "history.c"
       - path: engine
 
-  DilloSpike:
+  Dillo:
     type: application
     platform: iOS
     sources:
-      - path: DilloSpike
+      - path: Dillo
     dependencies:
       - target: DilloEngine
       - sdk: CoreText.framework
       - sdk: CoreGraphics.framework
       - sdk: libiconv.tbd
+    info:
+      path: Dillo/Info.plist
+      properties:
+        CFBundleDisplayName: Dillo
+        UILaunchScreen: {}
+        # A browser must reach plain-http sites; TLS still preferred.
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: org.dillo.DilloSpike
+        PRODUCT_BUNDLE_IDENTIFIER: org.dillo.ios
         SWIFT_VERSION: "5.0"
-        SWIFT_OBJC_BRIDGING_HEADER: DilloSpike/DilloSpike-Bridging-Header.h
-        GENERATE_INFOPLIST_FILE: "YES"
-        INFOPLIST_KEY_UILaunchScreen_Generation: "YES"
+        SWIFT_OBJC_BRIDGING_HEADER: Dillo/Dillo-Bridging-Header.h
         CURRENT_PROJECT_VERSION: "1"
         MARKETING_VERSION: "0.1"
         TARGETED_DEVICE_FAMILY: "1"

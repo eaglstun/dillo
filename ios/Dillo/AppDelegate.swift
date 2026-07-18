@@ -10,7 +10,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             [UIApplication.LaunchOptionsKey: Any]?
     ) -> Bool {
         let window = UIWindow(frame: UIScreen.main.bounds)
-        window.rootViewController = SpikeViewController()
+        window.rootViewController = BrowserViewController()
         window.makeKeyAndVisible()
         self.window = window
         return true
