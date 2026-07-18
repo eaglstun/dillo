@@ -21,10 +21,44 @@
 #include "../../src/msg.h"
 #include "../../src/bw.h"
 #include "../../src/web.hh"
-#include "../../src/capi.h"
 #include "../../src/hsts.h"
 #include "../../src/uicmd.hh"
 #include "../../src/dialog.hh"
+
+#include "IosShell.hh"
+
+/*
+ * ----- IosShell hook registry -----
+ */
+
+namespace dw {
+namespace ios {
+
+static OpenUrlHook openUrlHook = NULL;
+static TitleHook titleHook = NULL;
+static void *hookCtx = NULL;
+
+void setShellHooks (OpenUrlHook openUrl, TitleHook title, void *ctx)
+{
+   openUrlHook = openUrl;
+   titleHook = title;
+   hookCtx = ctx;
+}
+
+void dispatchOpenUrl (const DilloUrl *url)
+{
+   if (openUrlHook)
+      openUrlHook (hookCtx, url);
+}
+
+void dispatchTitle (const char *title)
+{
+   if (titleHook)
+      titleHook (hookCtx, title);
+}
+
+} // namespace ios
+} // namespace dw
 
 /*
  * ----- web.cc (data half) -----
@@ -74,52 +108,8 @@ void a_Web_free(DilloWeb *web)
 }
 
 /*
- * ----- capi.c (network/cache entry points) -----
- * No network, no cache: every URL is unavailable.
- */
-
-int a_Capi_open_url(DilloWeb *web, CA_Callback_t Call, void *CbData)
-{
-   /* Callers only add a cache client when the key is nonzero; on zero they
-    * drop their reference to the web, so free it here to avoid a leak. */
-   MSG("iOS spike: not fetching %s\n", URL_STR(web->url));
-   a_Web_free(web);
-   return 0;
-}
-
-int a_Capi_get_buf(const DilloUrl *Url, char **PBuf, int *BufSize)
-{
-   *PBuf = NULL;
-   *BufSize = 0;
-   return 0;
-}
-
-void a_Capi_unref_buf(const DilloUrl *Url)
-{
-}
-
-const char *a_Capi_set_content_type(const DilloUrl *url, const char *ctype,
-                                    const char *from)
-{
-   return ctype;
-}
-
-int a_Capi_get_flags_with_redirection(const DilloUrl *Url)
-{
-   return 0;
-}
-
-int a_Capi_dpi_verify_request(BrowserWindow *bw, DilloUrl *url)
-{
-   return 0;
-}
-
-void a_Capi_stop_client(int Key, int force)
-{
-}
-
-/*
  * ----- hsts.c -----
+ * (a_Capi_* now lives in IosCapi.cc, backed by the shell mini-cache.)
  */
 
 bool_t a_Hsts_require_https(const char *host)
@@ -133,15 +123,19 @@ bool_t a_Hsts_require_https(const char *host)
 
 void a_UIcmd_open_url(BrowserWindow *bw, const DilloUrl *url)
 {
-   MSG("iOS spike: a_UIcmd_open_url %s\n", url ? URL_STR(url) : "(null)");
+   if (url)
+      dw::ios::dispatchOpenUrl (url);
 }
 
 void a_UIcmd_open_url_nw(BrowserWindow *bw, const DilloUrl *url)
 {
+   /* no windows/tabs (yet): open in place */
+   a_UIcmd_open_url (bw, url);
 }
 
 void a_UIcmd_open_url_nt(void *vbw, const DilloUrl *url, int focus)
 {
+   a_UIcmd_open_url ((BrowserWindow *) vbw, url);
 }
 
 void a_UIcmd_finish_loading(BrowserWindow *bw)
@@ -190,7 +184,7 @@ void a_UIcmd_set_bug_prog(BrowserWindow *bw, int n_bug)
 
 void a_UIcmd_set_page_title(BrowserWindow *bw, const char *label)
 {
-   MSG("iOS spike: page title: %s\n", label);
+   dw::ios::dispatchTitle (label ? label : "");
 }
 
 void a_UIcmd_set_msg(BrowserWindow *bw, const char *format, ...)
