@@ -537,10 +537,10 @@ void Html_tag_open_input(DilloHtml *html, const char *tag, int tagsize)
       }
    } else if (!dStrAsciiCasecmp(type, "button")) {
       inp_type = DILLO_HTML_INPUT_BUTTON;
-      if (value) {
-         init_str = value;
-         resource = factory->createLabelButtonResource(init_str);
-      }
+      if (value == NULL)
+         value = dStrdup("");
+      init_str = value;
+      resource = factory->createLabelButtonResource(init_str);
    } else {
       /* Text input, which also is the default */
       inp_type = DILLO_HTML_INPUT_TEXT;
