@@ -3831,7 +3831,7 @@ static void Html_tag_cleanup_at_close(DilloHtml *html, int new_idx)
          /* Let these elements close anything left open inside them */
          continue;
       } else if (Tags[new_idx].Flags & 4 &&   // Block container
-                 Tags[stack_idx].Flags & 3) { // Inline element or container
+                 Tags[new_idx].Flags & 3) { // Inline element or container
          /* Let a block container close inline elements left open inside it. */
          continue;
       } else {
