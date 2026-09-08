@@ -292,7 +292,7 @@ static void search_cb(Fl_Widget *wid, void *data)
  */
 static void help_cb(Fl_Widget *w, void *)
 {
-   a_UIcmd_open_help(a_UIcmd_get_bw_by_widget(w));
+   a_UIcmd_open_help(a_UIcmd_get_bw_by_widget(w), NULL);
 }
 
 /**

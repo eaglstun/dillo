@@ -109,7 +109,7 @@ $D url                              # ...?q=boise+idaho&go=Search
 ```
 
 Checkbox and radio values read back as `on:VALUE` / `off:VALUE`, so `inputs N` is also how
-you confirm a `set` landed. Only the *named* submit button is included in the query, an
+you confirm a `set` landed. Only the _named_ submit button is included in the query, an
 unchecked checkbox is omitted entirely rather than sent as `off`, and only the selected
 radio is sent — verified 2026-09-08 against `test/dilloc/form.html`.
 
@@ -153,9 +153,9 @@ page_action="Mimic Chrome:curl_chrome136 -i --raw $url | dilloc rawload"
   a big commercial page something never completes. Same binary, same session, both URLs
   freshly opened (2026-09-08, `v3.2.0-210-gf330e201-dirty`):
 
-  | page | `wait 20` |
-  | ---- | --------- |
-  | `https://dillo-browser.org/` | returns in **1.8 s** |
+  | page                           | `wait 20`                                                                                                                                 |
+  | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+  | `https://dillo-browser.org/`   | returns in **1.8 s**                                                                                                                      |
   | a Zillow `homedetails` listing | burns all **20 s**, exits 1, `Current url not cached` — while `hdump` said `200 OK`, `title` was right, and `dump` returned 903,966 bytes |
 
   So a script that gates on `wait`'s exit code discards good pages. Treat `wait` as a hint
@@ -164,6 +164,7 @@ page_action="Mimic Chrome:curl_chrome136 -i --raw $url | dilloc rawload"
   use `wait`:** `submit` and `follow` both say "run `wait` afterwards", which is exactly the
   advice that fails on the pages worth automating. (This is separate from the already-fixed
   `nav.c` bug below, which had the same symptom for a different reason.)
+
 - **No instance isolation.** Sockets are `~/.dillo/ctl/<pid>`, and bare `dilloc` refuses
   outright — `multiple ctl sockets found, set DILLO_PID` — the moment a second Dillo
   exists, for any reason (a browser someone opened, another agent running the `test/dilloc`
@@ -175,15 +176,15 @@ page_action="Mimic Chrome:curl_chrome136 -i --raw $url | dilloc rawload"
 Behaviour confirmed by running it on 2026-09-08 against
 `v3.2.0-210-gf330e201-dirty`, not read off the source:
 
-| | |
-| --- | --- |
+|                                    |                                                                                                                |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------------- |
 | `links` `forms` `inputs` `resolve` | correct on `test/dilloc/form.html`; `links` also on a live Zillow page — 77 rows, absolute, no empty-href rows |
-| `set` | round-trips text, password, checkbox, radio, select, textarea, hidden |
-| `set` failure codes | `2` no such input, `3` not settable, `4` value rejected — as documented |
-| `submit N NAME` | correct form encoding, including which button and which checkbox/radio are sent |
-| `follow N` | live network navigation |
-| `noninteractive` | reports and sets |
-| `forms` on a JS-driven page | correctly empty — Zillow's search box is not a `<form>` in the server HTML |
+| `set`                              | round-trips text, password, checkbox, radio, select, textarea, hidden                                          |
+| `set` failure codes                | `2` no such input, `3` not settable, `4` value rejected — as documented                                        |
+| `submit N NAME`                    | correct form encoding, including which button and which checkbox/radio are sent                                |
+| `follow N`                         | live network navigation                                                                                        |
+| `noninteractive`                   | reports and sets                                                                                               |
+| `forms` on a JS-driven page        | correctly empty — Zillow's search box is not a `<form>` in the server HTML                                     |
 
 Not exercised: the new `form.cc` paths under memory pressure, `reset N`, file inputs,
 multipart POST to a real endpoint, or any of it on Linux/CI.

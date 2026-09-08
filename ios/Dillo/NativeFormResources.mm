@@ -48,6 +48,14 @@ namespace ios {
 static const int CTRL_ASCENT = 18, CTRL_DESCENT = 5;
 static const CGFloat CTRL_FONT_SIZE = 14;
 
+static UIColor *uiColor (int rgb)
+{
+   return [UIColor colorWithRed:((rgb >> 16) & 0xff) / 255.0
+                          green:((rgb >> 8) & 0xff) / 255.0
+                           blue:(rgb & 0xff) / 255.0
+                          alpha:1.0];
+}
+
 static void fillClickEvent (core::EventButton *event)
 {
    event->xCanvas = event->yCanvas = -1;
@@ -112,12 +120,51 @@ template <class I> class NativeResource: public I
 {
 private:
    bool enabled;
+   bool hasForegroundColor, hasBackgroundColor;
+   int foregroundColor, backgroundColor;
 
 protected:
    UIView *host;
    UIView *control;
    FormControlTarget *target;
    int reqWidth, reqAscent, reqDescent;
+
+   void applyColors (UIView *view, bool applyBackground = true)
+   {
+      if (hasForegroundColor) {
+         UIColor *fg = uiColor (foregroundColor);
+         view.tintColor = fg;
+
+         if ([view isKindOfClass:[UIButton class]]) {
+            UIButton *button = (UIButton *) view;
+            if (button.configuration) {
+               UIButtonConfiguration *conf = button.configuration;
+               conf.baseForegroundColor = fg;
+               button.configuration = conf;
+            } else {
+               [button setTitleColor:fg forState:UIControlStateNormal];
+            }
+         } else if ([view isKindOfClass:[UITextField class]]) {
+            ((UITextField *) view).textColor = fg;
+         } else if ([view isKindOfClass:[UITextView class]]) {
+            ((UITextView *) view).textColor = fg;
+         }
+      }
+
+      if (hasBackgroundColor && applyBackground) {
+         UIColor *bg = uiColor (backgroundColor);
+
+         if ([view isKindOfClass:[UIButton class]] &&
+             ((UIButton *) view).configuration) {
+            UIButton *button = (UIButton *) view;
+            UIButtonConfiguration *conf = button.configuration;
+            conf.background.backgroundColor = bg;
+            button.configuration = conf;
+         } else {
+            view.backgroundColor = bg;
+         }
+      }
+   }
 
    void attachControl (UIView *c)
    {
@@ -133,6 +180,8 @@ public:
       control = nil;
       target = nil;
       enabled = true;
+      hasForegroundColor = hasBackgroundColor = false;
+      foregroundColor = backgroundColor = 0;
       reqWidth = width;
       reqAscent = ascent;
       reqDescent = descent;
@@ -167,6 +216,26 @@ public:
    {
       if (control)
          control.hidden = displayed ? NO : YES;
+   }
+
+   void setStyle (core::style::Style *style)
+   {
+      core::style::Color *fg = style ? style->color : NULL;
+      core::style::Color *bg = style ? style->backgroundColor : NULL;
+
+      hasForegroundColor = fg != NULL;
+      hasBackgroundColor = bg != NULL;
+      if (fg)
+         foregroundColor =
+            ((dw::apple::AppleColor *) fg)->colors
+               [core::style::Color::SHADING_NORMAL];
+      if (bg)
+         backgroundColor =
+            ((dw::apple::AppleColor *) bg)->colors
+               [core::style::Color::SHADING_NORMAL];
+
+      if (control)
+         applyColors (control);
    }
 
    core::Iterator *iterator (core::Content::Type mask, bool atEnd)
@@ -758,6 +827,7 @@ class NativeListResource: public NativeResource<ui::ListResource>
          conf.background.cornerRadius = 0;
          row.configuration = conf;
          setButtonTitle (row, items[i].title.c_str ());
+         applyColors (row, false);
          row.contentHorizontalAlignment =
             UIControlContentHorizontalAlignmentLeft;
          row.enabled = items[i].enabled ? YES : NO;

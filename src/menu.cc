@@ -956,14 +956,29 @@ static void Menu_sysmenu_file_cb(Fl_Widget *wid, void *data)
 }
 
 /**
- * Callback for the system menu bar's Help menu.
+ * Callback for the Help menu's manual entries.
+ *
+ * 'data' is the anchor to jump to within the user manual, or NULL for the
+ * top of it.
  */
-static void Menu_sysmenu_help_cb(Fl_Widget*, void*)
+static void Menu_sysmenu_help_cb(Fl_Widget*, void *data)
 {
    BrowserWindow *bw = a_UIcmd_get_active_bw();
 
    if (bw)
-      a_UIcmd_open_help(bw);
+      a_UIcmd_open_help(bw, (const char*)data);
+}
+
+/**
+ * Callback for the Help menu's entries that point off-site. 'data' is the
+ * URL to open.
+ */
+static void Menu_sysmenu_weburl_cb(Fl_Widget*, void *data)
+{
+   BrowserWindow *bw = a_UIcmd_get_active_bw();
+
+   if (bw)
+      a_UIcmd_open_urlstr(bw, (const char*)data);
 }
 
 /**
@@ -988,9 +1003,32 @@ void a_Menu_sysmenubar_init(void)
           (void*)"cw",0,0,0,0,0},
          {0,0,0,0,0,0,0,0,0},
       /* Keep "Help" last: macOS treats the final menu of that name as the
-       * help menu and gives it the search field. */
+       * help menu and gives it the search field. The user_data of each
+       * manual entry is its anchor in doc/user_help.in.html. */
       {"Help", 0, 0, 0, FL_SUBMENU,0,0,0,0},
          {"Dillo Help", FL_COMMAND + '?', Menu_sysmenu_help_cb,0,0,0,0,0,0},
+         {"Keyboard Shortcuts", 0, Menu_sysmenu_help_cb,
+          (void*)"keyboard-shortcuts",0,0,0,0,0},
+         {"Manual Sections", 0, 0, 0, FL_SUBMENU,0,0,0,0},
+            {"Introduction", 0, Menu_sysmenu_help_cb,
+             (void*)"introduction",0,0,0,0,0},
+            {"Reading", 0, Menu_sysmenu_help_cb,
+             (void*)"reading",0,0,0,0,0},
+            {"Navigation", 0, Menu_sysmenu_help_cb,
+             (void*)"navigation",0,0,0,0,0},
+            {"Privacy and Network", 0, Menu_sysmenu_help_cb,
+             (void*)"privacy-and-network",0,0,0,0,0},
+            {"Configuration", 0, Menu_sysmenu_help_cb,
+             (void*)"configuration",0,0,0,0,0},
+            {"Advanced Usage", 0, Menu_sysmenu_help_cb,
+             (void*)"advanced-usage",0,0,0,0,0},
+            {0,0,0,0,0,0,0,0,0},
+         {"Bug Meter", 0, Menu_sysmenu_help_cb,
+          (void*)"bug-meter", FL_MENU_DIVIDER,0,0,0,0},
+         {"Dillo Website", 0, Menu_sysmenu_weburl_cb,
+          (void*)"https://dillo-browser.org/",0,0,0,0,0},
+         {"Report a Bug", 0, Menu_sysmenu_weburl_cb,
+          (void*)"https://github.com/dillo-browser/dillo/issues",0,0,0,0,0},
          {0,0,0,0,0,0,0,0,0},
       {0,0,0,0,0,0,0,0,0}
    };

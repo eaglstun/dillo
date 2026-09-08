@@ -65,6 +65,11 @@
 #include "auth.h"
 #include "styleengine.hh"
 
+#ifdef __APPLE__
+#  include <dirent.h>
+#  include <CoreText/CoreText.h>
+#endif
+
 #include "dw/fltkcore.hh"
 #include "dw/widget.hh"
 #include "dw/textblock.hh"
@@ -330,6 +335,75 @@ static void checkFont(const char *name, const char *type)
       MSG_WARN("preferred %s font \"%s\" not found.\n", type, name);
 }
 
+#ifdef __APPLE__
+/**
+ * Register one font file with this process only.
+ *
+ * Nothing is installed for other applications and nothing outlives the
+ * process; the fonts simply become visible to font enumeration.
+ */
+static bool registerFontFile(const char *path)
+{
+   CFStringRef str = CFStringCreateWithCString(NULL, path,
+                                               kCFStringEncodingUTF8);
+   CFURLRef url = CFURLCreateWithFileSystemPath(NULL, str,
+                                                kCFURLPOSIXPathStyle, false);
+   CFErrorRef err = NULL;
+   bool ok = CTFontManagerRegisterFontsForURL(url, kCTFontManagerScopeProcess,
+                                              &err);
+   if (err)
+      CFRelease(err);
+   CFRelease(url);
+   CFRelease(str);
+   return ok;
+}
+
+/**
+ * Register every .ttf in 'dir'. Returns how many were registered.
+ */
+static int registerFontsIn(const char *dir)
+{
+   DIR *dp = opendir(dir);
+   struct dirent *ent;
+   int n = 0;
+
+   if (!dp)
+      return 0;
+
+   while ((ent = readdir(dp))) {
+      const char *dot = strrchr(ent->d_name, '.');
+
+      if (dot && dStrAsciiCasecmp(dot, ".ttf") == 0) {
+         char *path = dStrconcat(dir, ent->d_name, NULL);
+
+         if (registerFontFile(path))
+            n++;
+         dFree(path);
+      }
+   }
+   closedir(dp);
+   return n;
+}
+
+/**
+ * macOS does not ship the DejaVu fonts that dillo prefers, so use the copies
+ * bundled with dillo instead of silently falling back to Helvetica.
+ *
+ * Must run before the font list is built, i.e. before checkPreferredFonts().
+ */
+static void registerBundledFonts()
+{
+   int n = registerFontsIn(DILLO_FONTSDIR);
+
+   if (n == 0)                  /* not installed: try the source tree */
+      n = registerFontsIn(DILLO_SRC_FONTSDIR);
+   if (n == 0)
+      MSG_WARN("No bundled fonts found in \"%s\".\n", DILLO_FONTSDIR);
+   else
+      _MSG("Registered %d bundled font file(s).\n", n);
+}
+#endif /* __APPLE__ */
+
 static void checkPreferredFonts()
 {
    checkFont(prefs.font_sans_serif, "sans-serif");
@@ -555,6 +629,9 @@ int main(int argc, char **argv)
    // Use to permit '&' interpretation.
    Fl::set_labeltype(FL_FREE_LABELTYPE,custMenuLabelDraw,custMenuLabelMeasure);
 
+#ifdef __APPLE__
+   registerBundledFonts();
+#endif
    checkPreferredFonts();
 
    /* use preferred font for UI */

@@ -920,6 +920,16 @@ if test "x$git_found" = "xyes" ; then
     AC_MSG_RESULT([no])
   fi
 fi
+dnl ----------------------------------------------
+dnl Bundled fonts: macOS ships no DejaVu, which is
+dnl what dillo asks for by default.
+dnl ----------------------------------------------
+case "$target_os" in
+  darwin*) bundled_fonts_ok="yes" ;;
+  *)       bundled_fonts_ok="no"  ;;
+esac
+AM_CONDITIONAL([BUNDLE_FONTS],  [test "x$bundled_fonts_ok" = "xyes"])
+
 AM_CONDITIONAL([GIT_AVAILABLE],  [test "x$git_ok" = "xyes"])
 
 AC_SUBST(BASE_CUR_WORKING_DIR)

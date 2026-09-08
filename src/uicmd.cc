@@ -937,20 +937,33 @@ void a_UIcmd_home(void *vbw, int nt)
  * Open the user help page: the local copy if it is installed, otherwise the
  * one on the website.
  */
-void a_UIcmd_open_help(BrowserWindow *bw)
+void a_UIcmd_open_help(BrowserWindow *bw, const char *fragment)
 {
-   char *path = dStrconcat(DILLO_DOCDIR, "user_help.html", NULL);
+   /* Installed copy first, then the one built in an uninstalled tree. */
+   const char *dirs[] = { DILLO_DOCDIR, DILLO_BUILD_DOCDIR };
+   char *urlstr = NULL;
 
-   if (access(path, R_OK) == 0) {
-      char *urlstr = dStrconcat("file:", path, NULL);
-      a_UIcmd_open_urlstr(bw, urlstr);
-      dFree(urlstr);
-   } else {
-      MSG("Can't read local help file at \"%s\"."
-          " Getting remote help...\n", path);
-      a_UIcmd_open_urlstr(bw, "https://dillo-browser.org/user_help.html");
+   for (uint_t i = 0; i < sizeof(dirs) / sizeof(dirs[0]) && !urlstr; i++) {
+      char *path = dStrconcat(dirs[i], "user_help.html", NULL);
+
+      if (access(path, R_OK) == 0)
+         urlstr = dStrconcat("file:", path, NULL);
+      dFree(path);
    }
-   dFree(path);
+
+   if (!urlstr) {
+      MSG("No local help file found, getting remote help...\n");
+      urlstr = dStrdup("https://dillo-browser.org/user_help.html");
+   }
+
+   if (fragment) {
+      char *anchored = dStrconcat(urlstr, "#", fragment, NULL);
+      dFree(urlstr);
+      urlstr = anchored;
+   }
+
+   a_UIcmd_open_urlstr(bw, urlstr);
+   dFree(urlstr);
 }
 
 /*

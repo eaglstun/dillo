@@ -2,6 +2,9 @@ AM_CPPFLAGS= \
 	-I$(top_srcdir) \
 	-DDILLO_SYSCONF='"$(sysconfdir)/"' \
 	-DDILLO_DOCDIR='"$(docdir)/"' \
+	-DDILLO_BUILD_DOCDIR='"@BASE_CUR_WORKING_DIR@/doc/"' \
+	-DDILLO_FONTSDIR='"$(datadir)/dillo/fonts/"' \
+	-DDILLO_SRC_FONTSDIR='"$(abs_top_srcdir)/fonts/"' \
 	-DCUR_WORKING_DIR='"@BASE_CUR_WORKING_DIR@/src"' \
 	@LIBJPEG_CPPFLAGS@
 
