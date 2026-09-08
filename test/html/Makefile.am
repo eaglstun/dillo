@@ -13,6 +13,7 @@ EXTRA_DIST = \
 
 TESTS = \
 	render/b-div.html \
+	render/css-easy-wins.html \
 	render/div-100-percent-with-padding.html \
 	render/float-img-justify.html \
 	render/form-display-none.html \

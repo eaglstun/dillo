@@ -72,6 +72,15 @@ FLTK caches its font table on first enumeration.
 - The `BUNDLE_FONTS` conditional in `configure.ac` keys on `darwin*`, so a Linux
   install does not get 5 MB of fonts it already has.
 
+**Apple Help Book.** `mac/` holds a minimal `Dillo.help` bundle and the app
+`Info.plist.in`; `mac/Makefile.am` assembles `Dillo.app` on darwin and builds the
+search index with `hiutil` (the index is a build product, never committed). A help
+book is only reachable through an application bundle's `CFBundleHelpBookFolder` /
+`CFBundleHelpBookName`, so the plain `build/src/dillo` binary has no help book and
+falls back to the manual in a tab — that fallback is the whole point of
+`UIcmd_show_help_book()` returning FALSE. Help Viewer is `Tips.app` on current
+macOS. Deeper notes are in the user-level `apple-help-books` skill.
+
 ### Verifying UI changes on macOS
 
 Two traps that will happily hand you a confident wrong answer:
