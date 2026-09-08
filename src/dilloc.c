@@ -270,8 +270,13 @@ int main(int argc, char *argv[])
          }
       }
 
-      dClose(fd);
-      return 0;
+      /* Dillo reads the body up to EOF, so close only our sending side and
+       * keep reading: the status reply below still has to reach us. (Before
+       * this, load/rawload closed the socket here and always exited 0.) */
+      if (shutdown(fd, SHUT_WR) != 0) {
+         perror("shutdown socket failed");
+         return 2;
+      }
    }
 
    /* First two bytes determine exit code */

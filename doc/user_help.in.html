@@ -834,6 +834,43 @@ standard output. Some commands can also read data from the standard input and
 write it to dillo. Use <code>dilloc help</code> to see which commands are
 available and their syntax.
 
+<p>
+Besides navigation (<code>open</code>, <code>wait</code>, <code>url</code>,
+<code>title</code>, <code>dump</code>, <code>load</code>, ...) dilloc can
+inspect and operate the forms and links of the current page:
+<ul>
+<li><code>links</code>, <code>forms</code>, <code>inputs N</code> list the
+links, the forms and the inputs of form N, one per line, with TAB separated
+fields (index, type, name, current value). Indices are 0-based.</li>
+<li><code>set N NAME VALUE</code> sets input NAME of form N. Text fields take
+the rest of the line (spaces are fine, newlines cannot be sent), checkboxes
+take <code>on</code>/<code>off</code>, radios and selects take an option value.
+File inputs cannot be set remotely.</li>
+<li><code>submit N [NAME]</code> submits form N as if the submit button NAME
+had been clicked; <code>reset N</code> resets it; <code>follow N</code> opens
+link N. These start a page load and return immediately, so run
+<code>dilloc wait</code> after them.</li>
+<li><code>resolve HREF</code> prints HREF resolved against the current URL.</li>
+<li><code>noninteractive 1</code> makes dillo answer every modal dialog (insecure
+form submission, file chooser, TLS warnings, ...) with its cancel/refuse
+default instead of blocking, so a script never hangs waiting for a click.
+The same can be set permanently with <code>noninteractive=YES</code> in
+dillorc. Refusals are reported as a non-zero exit status and logged.</li>
+</ul>
+
+<p>
+For example, to search a site from a script:
+<pre>
+dilloc noninteractive 1
+dilloc open https://example.org/ &amp;&amp; dilloc wait
+dilloc forms                    # 0  GET  https://example.org/search  ...
+dilloc inputs 0                 # 0  text  q  ...
+dilloc set 0 q dillo browser
+dilloc submit 0 &amp;&amp; dilloc wait
+dilloc url                      # https://example.org/search?q=dillo+browser
+dilloc dump &gt; results.html
+</pre>
+
 <h3 id="custom-actions">Custom actions</h3>
 <p>
 Users can define custom actions that execute arbitrary programs directly from

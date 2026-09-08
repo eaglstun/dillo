@@ -1622,9 +1622,11 @@ void a_UIcmd_set_page_title(BrowserWindow *bw, const char *label)
  */
 const char *a_UIcmd_get_page_title(BrowserWindow *bw)
 {
-   DilloUrl *url = a_Url_new(a_UIcmd_get_location_text(bw), NULL);
+   char *location = a_UIcmd_get_location_text(bw);
+   DilloUrl *url = a_Url_new(location, NULL);
    const char *title = a_History_get_title_by_url(url, 0);
    a_Url_free(url);
+   dFree(location);
    return title;
 }
 

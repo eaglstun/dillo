@@ -286,6 +286,53 @@ void a_Html_form_display_hiddens(void *v_html, void *v_form, bool_t display)
    }
 }
 
+/*
+ * Control-socket introspection (see html.hh for the contract).
+ */
+
+int a_Html_link_count(void *v_html)
+{
+   DilloHtml *html = (DilloHtml*)v_html;
+
+   return html->links->size();
+}
+
+DilloUrl *a_Html_link_url(void *v_html, int n)
+{
+   DilloHtml *html = (DilloHtml*)v_html;
+
+   if (n < 0 || n >= html->links->size())
+      return NULL;
+   /* Entries can be NULL (Html_set_new_link stores NULL for a NULL url) */
+   return html->links->get(n);
+}
+
+void a_Html_links_describe(void *v_html, Dstr *out)
+{
+   DilloHtml *html = (DilloHtml*)v_html;
+
+   for (int i = 0; i < html->links->size(); i++) {
+      DilloUrl *url = html->links->get(i);
+      dStr_sprintfa(out, "%d\t%s\n", i, url ? URL_STR(url) : "");
+   }
+}
+
+int a_Html_form_count(void *v_html)
+{
+   DilloHtml *html = (DilloHtml*)v_html;
+
+   return html->forms->size();
+}
+
+void *a_Html_get_form(void *v_html, int n)
+{
+   DilloHtml *html = (DilloHtml*)v_html;
+
+   if (n < 0 || n >= html->forms->size())
+      return NULL;
+   return (void*)html->forms->get(n);
+}
+
 /**
  * Set the URL data for image maps.
  */

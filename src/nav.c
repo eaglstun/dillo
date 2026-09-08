@@ -237,6 +237,15 @@ static void Nav_open_url(BrowserWindow *bw, const DilloUrl *url,
          a_Bw_add_client(bw, ClientKey, 1);
          a_Bw_add_url(bw, url);
       }
+   } else {
+      /* The requested url and fragment are already being displayed, so no
+       * load is started. a_Nav_push has already armed the expectation
+       * though, and nothing else will ever clear it: do it here, or the bw
+       * reports "still loading" forever (a_UIcmd_has_finished stays false,
+       * so "dilloc ready" fails and "dilloc wait" blocks until timeout). */
+      a_Bw_cancel_expect(bw);
+      a_UIcmd_set_buttons_sens(bw);
+      a_UIcmd_finish_loading(bw);
    }
 }
 

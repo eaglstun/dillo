@@ -462,6 +462,12 @@ ui_tab_bg_color=#b7beb7
 # Ask before quitting Dillo with more than one window or tab open.
 #show_quit_dialog=NO
 
+# Never block on a modal dialog: answer every prompt with its safe default
+# (cancel, refuse, no file) and log it instead. Meant for driving Dillo from
+# a script over the control socket (see "dilloc help"); can also be toggled
+# at run time with "dilloc noninteractive 1".
+#noninteractive=NO
+
 #-------------------------------------------------------------------------
 #                        DEBUG MESSAGES SECTION
 #-------------------------------------------------------------------------

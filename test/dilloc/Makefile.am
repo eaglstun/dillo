@@ -10,9 +10,17 @@ TESTS = \
 	cmd-load.sh \
 	cmd-load-multi.sh \
 	cmd-load-deadlock.sh \
-	cmd-title.sh
+	cmd-load-reply.sh \
+	cmd-title.sh \
+	cmd-introspect.sh \
+	cmd-set.sh \
+	cmd-submit.sh \
+	cmd-follow.sh \
+	cmd-noninteractive.sh
 
 EXTRA_DIST = \
 	$(TESTS) \
 	driver.sh \
-	test.html
+	test.html \
+	form.html \
+	form-target.html

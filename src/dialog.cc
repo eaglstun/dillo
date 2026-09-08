@@ -45,6 +45,23 @@ static int input_answer;
 static char *input_str = NULL;
 static int choice_answer;
 
+/**
+ * In non-interactive mode (prefs.noninteractive, set from dillorc or with
+ * "dilloc noninteractive 1") no modal dialog may block the event loop,
+ * because the control socket runs on that same loop and a script would hang
+ * forever. Each dialog entry point checks this first and returns its
+ * "cancelled" value; the prompt is logged so the refusal is visible.
+ */
+static bool Dialog_suppressed(const char *kind, const char *title,
+                              const char *msg)
+{
+   if (!prefs.noninteractive)
+      return false;
+   MSG("noninteractive: suppressed %s dialog \"%s\": %s\n", kind,
+       title ? title : "", msg ? msg : "");
+   return true;
+}
+
 
 /*
  * Local sub classes
@@ -153,6 +170,8 @@ void a_Dialog_msg(const char *title, const char *msg)
 {
    if (!(title && *title))
       title = "Dillo: Message";
+   if (Dialog_suppressed("message", title, msg))
+      return;
    fl_message_title(title);
    fl_message("%s", msg);
 }
@@ -177,6 +196,9 @@ const char *a_Dialog_input(const char *title, const char *msg)
 {
    static Fl_Menu_Item *pm = 0;
    int ww = 450, wh = 130, gap = 10, ih = 60, bw = 80, bh = 30;
+
+   if (Dialog_suppressed("input", title, msg))
+      return NULL;
 
    input_answer = 0;
 
@@ -262,6 +284,8 @@ const char *a_Dialog_passwd(const char *title, const char *msg)
 {
    if (!(title && *title))
       title = "Dillo: Password";
+   if (Dialog_suppressed("password", title, msg))
+      return NULL;
    fl_message_title(title);
    return fl_password("%s", "", msg);
 }
@@ -274,6 +298,9 @@ const char *a_Dialog_passwd(const char *title, const char *msg)
 const char *a_Dialog_save_file(const char *title,
                                const char *pattern, const char *fname)
 {
+   /* a_Dialog_select_file() (file inputs) comes through here as well */
+   if (Dialog_suppressed("file chooser", title, fname))
+      return NULL;
    return fl_file_chooser(title, pattern, fname);
 }
 
@@ -302,6 +329,8 @@ char *a_Dialog_open_file(const char *title,
 {
    const char *fc_name;
 
+   if (Dialog_suppressed("file chooser", title, fname))
+      return NULL;
    fc_name = fl_file_chooser(title, pattern, fname);
    return (fc_name) ? a_Misc_escape_chars(fc_name, "% #") : NULL;
 }
@@ -374,6 +403,10 @@ int a_Dialog_choice(const char *title, const char *msg, ...)
 
    if (title == NULL || *title == '\0')
       title = "Dillo: Choice";
+
+   /* 0 is "dialog was cancelled"; every caller treats it as refuse/abort */
+   if (Dialog_suppressed("choice", title, msg))
+      return 0;
 
    va_start(ap, msg);
    for (n = 0; va_arg(ap, char *) != NULL; n++);
@@ -449,6 +482,8 @@ int a_Dialog_user_password(const char *title, const char *msg,
    /* window is resized below */
    if (!(title && *title))
       title = "Dillo: User/Password";
+   if (Dialog_suppressed("user/password", title, msg))
+      return 0;
    Fl_Window *window = new Fl_Window(window_w,window_h,title);
    Fl_Group::current(0);
    window->user_data(NULL);

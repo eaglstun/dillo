@@ -50,6 +50,7 @@ Run `./autogen.sh` again to regenerate the configure script, then re-run configu
 ## Build system
 
 Uses autoconf/automake. Key files:
+
 - `configure.ac` - Main configure template
 - `Makefile.am` - Top-level and per-directory Makefile templates
 - `autogen.sh` - Regenerates configure from configure.ac
@@ -68,3 +69,34 @@ Uses autoconf/automake. Key files:
 - C code uses C99 (`-std=c99`)
 - C++ code uses C++11, no RTTI, no exceptions (`-fno-rtti -fno-exceptions`)
 - Compiler warnings enabled: `-Wall -W -Wno-unused-parameter -pedantic`
+
+## Scripting / automation
+
+See **[AUTOMATION.md](AUTOMATION.md)** before planning anything that drives Dillo
+programmatically — it carries the full command set, worked examples, and the limits that
+actually bite. **[AUTOMATION-PLAN.md](AUTOMATION-PLAN.md)** is the staged plan behind the
+form/link verbs; Stages 1-4 and 6 are done, Stage 5 (async replies) is open. Short version:
+
+- `dilloc` (built alongside `dillo` when `+CTL` is in `--version`) drives a running
+  browser over `~/.dillo/ctl/<pid>`. Navigate and read: `open`, `wait`, `dump`, `hdump`,
+  `load`, `rawload`, `title`, `url`, `reload`, `quit`. Introspect and act: `links`,
+  `forms`, `inputs N`, `resolve`, `set N NAME VALUE`, `submit N [NAME]`, `reset N`,
+  `follow N`, `noninteractive`.
+- **Still no JavaScript engine** — only data present in the server's HTML is reachable,
+  and addressing is by index and name, never by visible text or selector.
+- Two traps worth knowing before you write a script: `wait` burns its full timeout and
+  exits 1 on a heavy page that loaded fine (settle on `dump`'s byte count instead), and a
+  second running Dillo makes bare `dilloc` refuse outright — spawn your own and pin
+  `DILLO_PID`. Both are detailed in AUTOMATION.md.
+- `ios/` is a separate iOS port (branch `ios-render-spike`): the dw engine +
+  parser behind an ObjC bridge, UIKit form controls, `URLSession` fetching. It is
+  a human-interaction surface — there is no control channel.
+
+## iOS port layout (`ios/`)
+
+- `ios/Dillo/` — app shell: `DilloBridge.{h,mm}` (public API), `PageLoader.swift`
+  (fetch + charset + stylesheet prefetch), `NativeFormResources.mm` (UIKit form
+  widgets), `BrowserViewController.swift` (chrome, find bar, gestures, history)
+- `ios/engine/` — platform layer: `AppleCoreTextPlatform`, `CoreGraphicsView`,
+  `AppleImgbuf`, `IosCapi`, stubs for the desktop-only pieces
+- `ios/PLAN.md` / `ios/RESULT.md` — living roadmap and milestone log

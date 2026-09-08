@@ -123,6 +123,9 @@ typedef struct {
    bool_t show_extra_warnings;
    bool_t trace_http;
    bool_t middle_click_drags_page;
+   /* Answer every modal dialog with its safe default instead of blocking;
+    * for scripted use over the control socket */
+   bool_t noninteractive;
    int penalty_hyphen, penalty_hyphen_2;
    int penalty_em_dash_left, penalty_em_dash_right, penalty_em_dash_right_2;
    int stretchability_factor;
