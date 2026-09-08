@@ -44,6 +44,11 @@ final class BrowserViewController: UIViewController {
     private let scrollView = UIScrollView()
     private let renderView = RenderView(frame: .zero)
 
+    private var zoomFactor: CGFloat = 1
+    private var pinchStartZoom: CGFloat = 1
+    private var pinchStartCanvasPoint = CGPoint.zero
+    private var pinchViewportPoint = CGPoint.zero
+
     private let findBar = UIStackView()
     private let findField = UITextField()
     private let findStatus = UILabel()
@@ -85,6 +90,7 @@ final class BrowserViewController: UIViewController {
             self?.bridge.resolveURL(href, baseURL: base)
         })
         renderView.bridge = bridge
+        zoomFactor = CGFloat(bridge.zoomFactor)
 
         bridge.onInvalidate = { [weak self] in
             self?.canvasChanged()
@@ -222,6 +228,11 @@ final class BrowserViewController: UIViewController {
         longPress.delegate = self
         scrollView.addGestureRecognizer(longPress)
 
+        let pinch = UIPinchGestureRecognizer(
+            target: self, action: #selector(handlePinch(_:)))
+        pinch.delegate = self
+        scrollView.addGestureRecognizer(pinch)
+
         let edgeSwipe = UIScreenEdgePanGestureRecognizer(
             target: self, action: #selector(handleEdgeSwipe(_:)))
         edgeSwipe.edges = .left
@@ -313,6 +324,60 @@ final class BrowserViewController: UIViewController {
         if gr.state == .ended {
             goBack()
         }
+    }
+
+    @objc private func handlePinch(_ gr: UIPinchGestureRecognizer) {
+        switch gr.state {
+        case .began:
+            pinchStartZoom = zoomFactor
+            pinchViewportPoint = gr.location(in: renderView)
+            pinchStartCanvasPoint = CGPoint(
+                x: scrollView.contentOffset.x + pinchViewportPoint.x,
+                y: scrollView.contentOffset.y + pinchViewportPoint.y)
+
+        case .changed, .ended:
+            // Rebuilding the Dillo widget tree is substantially more work than
+            // changing a layer transform. Ten-percent steps keep the gesture
+            // responsive and match desktop Dillo's zoom commands.
+            let proposed = min(3, max(0.5, pinchStartZoom * gr.scale))
+            let stepped = (proposed * 10).rounded() / 10
+            guard abs(stepped - zoomFactor) >= 0.05 else {
+                if gr.state == .ended {
+                    flashStatus("Zoom: \(Int(zoomFactor * 100))%")
+                }
+                return
+            }
+
+            let relativeScale = stepped / pinchStartZoom
+            zoomFactor = CGFloat(bridge.applyZoom(Float(stepped)))
+
+            // Keep approximately the same canvas point under the fingers.
+            // Reflow can move individual lines, but this avoids jumping to the
+            // top-left as the newly sized canvas replaces the old one.
+            let wantedOffset = CGPoint(
+                x: pinchStartCanvasPoint.x * relativeScale
+                    - pinchViewportPoint.x,
+                y: pinchStartCanvasPoint.y * relativeScale
+                    - pinchViewportPoint.y)
+            setClampedContentOffset(wantedOffset)
+
+            if gr.state == .ended {
+                flashStatus("Zoom: \(Int(zoomFactor * 100))%")
+            }
+
+        default:
+            break
+        }
+    }
+
+    private func setClampedContentOffset(_ proposed: CGPoint) {
+        let maxX = max(0, scrollView.contentSize.width
+            - scrollView.bounds.width)
+        let maxY = max(0, scrollView.contentSize.height
+            - scrollView.bounds.height)
+        scrollView.setContentOffset(CGPoint(
+            x: min(max(0, proposed.x), maxX),
+            y: min(max(0, proposed.y), maxY)), animated: false)
     }
 
     private func flashStatus(_ text: String) {
@@ -474,6 +539,16 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
         shouldReceive touch: UITouch
     ) -> Bool {
         return touch.view === scrollView
+    }
+
+    func gestureRecognizer(
+        _ gestureRecognizer: UIGestureRecognizer,
+        shouldRecognizeSimultaneouslyWith otherGestureRecognizer:
+            UIGestureRecognizer
+    ) -> Bool {
+        // Let the scroll view's pan physics continue while two fingers pinch.
+        return gestureRecognizer is UIPinchGestureRecognizer
+            || otherGestureRecognizer is UIPinchGestureRecognizer
     }
 }
 

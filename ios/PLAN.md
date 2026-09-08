@@ -98,10 +98,11 @@ pick re-fires the button click), inline checkable multi-select lists,
 and placeholder-based autofill hints. `data:` URLs load for form
 testing.
 
-### M7 — Zoom + wide pages
+### M7 — Zoom + wide pages (pinch implemented; fit-width open)
 
-Pinch gesture → `bw->zoom` (the StyleEngine already takes zoom — the
-desktop has ctrl+/- zoom) → reflow via `viewportSizeChanged` + re-layout.
+Pinch gesture now updates `bw->zoom` in 10% steps and reparses the retained
+HTML source (the StyleEngine resolves zoom while building styles). The shell
+approximately preserves the canvas point under the gesture while reflowing.
 Double-tap to toggle fit-width for pages wider than the viewport (which
 currently wrap at min-width and pan horizontally).
 

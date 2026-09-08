@@ -18,6 +18,7 @@
 #import "DilloBridge.h"
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 #include <string>
@@ -73,6 +74,8 @@
    BrowserWindow *_bw;
    char *_pageBuf;       // current page's parser buffer (mutated, retained)
    char *_oldPageBuf;    // previous page's buffer, freed after widget swap
+   NSString *_currentHTML;       // immutable source for zoom reparses
+   NSString *_currentURLString;
    NSURLSession *_imageSession;
    NSMutableDictionary<NSNumber *, PendingImage *> *_pendingImages;
    dw::core::ui::ResourceFactory *_formFactory;
@@ -385,6 +388,11 @@ static void initDilloOnce (void)
    [self cancelPendingImages];
    _haveSelectedFile = NO;
 
+   /* The parser mutates its private dStrdup below. Keep the pristine source
+    * so changing zoom can rebuild styles without another network request. */
+   _currentHTML = [html copy];
+   _currentURLString = [urlString copy];
+
    DilloUrl *url = a_Url_new ([urlString UTF8String], NULL);
 
    DilloHtml *page = new DilloHtml (_bw, url, "text/html; charset=UTF-8");
@@ -437,6 +445,28 @@ static void initDilloOnce (void)
    _platform->runIdles ();
    if (self.onInvalidate)
       self.onInvalidate ();
+}
+
+- (float)zoomFactor
+{
+   return _bw->zoom;
+}
+
+- (float)applyZoom:(float)zoom
+{
+   /* Match the desktop zoom limits. The gesture shell uses a narrower range
+    * for ergonomics, while the bridge keeps the engine invariant explicit. */
+   float clamped = fmaxf (0.10f, fminf (10.0f, zoom));
+   if (fabsf (clamped - _bw->zoom) < 0.001f)
+      return _bw->zoom;
+
+   _bw->zoom = clamped;
+   if (_currentHTML && _currentURLString) {
+      NSString *html = _currentHTML;
+      NSString *url = _currentURLString;
+      [self loadHTML:html url:url];
+   }
+   return _bw->zoom;
 }
 
 - (void)tapAtX:(int)x y:(int)y

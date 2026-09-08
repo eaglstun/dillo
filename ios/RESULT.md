@@ -10,6 +10,22 @@ the engine's own scaling. Milestone 5: **interactive forms** — native
 UIKit controls driven by the engine's layout, GET and POST submission
 through dillo's own `form.cc`.
 
+## Milestone 7 — basic pinch zoom
+
+Two-finger pinch now changes Dillo's real document zoom from 50–300% in
+10% steps. This is reflow zoom, not bitmap magnification: the bridge retains
+the pristine HTML source, updates `BrowserWindow::zoom`, and rebuilds the
+widget tree so font sizes and CSS pixel lengths are recomputed. The shell
+clamps the new scroll offset to the resized canvas and approximately keeps
+the point between the user's fingers stationary. It can recognize alongside
+the scroll view's pan gesture, and reports the final percentage in the title
+status line.
+
+Verified by a clean simulator build and launch on September 8, 2026. The
+gesture itself still needs hands-on feel testing; zoom reparsing also resets
+transient form values, which is acceptable for this first pass but should be
+revisited before calling M7 finished. Double-tap fit-width remains open.
+
 ## Milestone 6 — navigation polish (the M8 list)
 
 ![find](browser-find.png) ![selection](browser-selection.png)

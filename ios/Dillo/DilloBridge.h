@@ -24,6 +24,11 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, readonly) int canvasWidth;
 @property (nonatomic, readonly) int canvasHeight;
 
+/// Current document zoom. Applying a new value reparses the retained source
+/// because Dillo resolves CSS lengths while constructing the widget tree.
+@property (nonatomic, readonly) float zoomFactor;
+- (float)applyZoom:(float)zoom NS_SWIFT_NAME(applyZoom(_:));
+
 /// Engine queued a redraw (reflow, late resize). Also a good moment for the
 /// shell to re-read canvasHeight.
 @property (nonatomic, copy, nullable) void (^onInvalidate)(void);
