@@ -17,6 +17,8 @@
 
 #include <FL/Fl.H>
 #include <FL/Fl_Menu_Item.H>
+#include <FL/Fl_Group.H>
+#include <FL/Fl_Sys_Menu_Bar.H>
 
 #include "lout/misc.hh"    /* SimpleVector */
 #include "msg.h"
@@ -928,3 +930,84 @@ void a_Menu_tools_popup(BrowserWindow *bw, int x, int y)
    }
 }
 
+
+/*
+ * macOS system menu bar ---------------------------------------------------
+ */
+
+#ifdef __APPLE__
+
+/**
+ * Callback for the system menu bar's File menu.
+ *
+ * FLTK keeps a single system menu bar for the whole application, so unlike
+ * the in-window popups this one cannot capture its browser window when it is
+ * built. Resolve the frontmost window at click time instead, then reuse the
+ * regular File menu callback.
+ */
+static void Menu_sysmenu_file_cb(Fl_Widget *wid, void *data)
+{
+   BrowserWindow *bw = a_UIcmd_get_active_bw();
+
+   if (bw) {
+      popup_bw = bw;
+      filemenu_cb(wid, data);
+   }
+}
+
+/**
+ * Callback for the system menu bar's Help menu.
+ */
+static void Menu_sysmenu_help_cb(Fl_Widget*, void*)
+{
+   BrowserWindow *bw = a_UIcmd_get_active_bw();
+
+   if (bw)
+      a_UIcmd_open_help(bw);
+}
+
+/**
+ * Install dillo's menus in the menu bar at the top of the screen.
+ *
+ * Call once, after the display is open. There is no "Quit" item here: on
+ * macOS that belongs in the application menu, which FLTK builds for us.
+ */
+void a_Menu_sysmenubar_init(void)
+{
+   static Fl_Menu_Item pm[] = {
+      {"File", 0, 0, 0, FL_SUBMENU,0,0,0,0},
+         {"New Tab", FL_COMMAND + 't', Menu_sysmenu_file_cb,
+          (void*)"nt",0,0,0,0,0},
+         {"New Window", FL_COMMAND + 'n', Menu_sysmenu_file_cb,
+          (void*)"nw", FL_MENU_DIVIDER,0,0,0,0},
+         {"Open File...", FL_COMMAND + 'o', Menu_sysmenu_file_cb,
+          (void*)"of",0,0,0,0,0},
+         {"Open Location...", FL_COMMAND + 'l', Menu_sysmenu_file_cb,
+          (void*)"ou", FL_MENU_DIVIDER,0,0,0,0},
+         {"Close Tab", FL_COMMAND + 'w', Menu_sysmenu_file_cb,
+          (void*)"cw",0,0,0,0,0},
+         {0,0,0,0,0,0,0,0,0},
+      /* Keep "Help" last: macOS treats the final menu of that name as the
+       * help menu and gives it the search field. */
+      {"Help", 0, 0, 0, FL_SUBMENU,0,0,0,0},
+         {"Dillo Help", FL_COMMAND + '?', Menu_sysmenu_help_cb,0,0,0,0,0,0},
+         {0,0,0,0,0,0,0,0,0},
+      {0,0,0,0,0,0,0,0,0}
+   };
+
+   /* Keep the bar out of any window group: it outlives every window, and
+    * being deleted with one would tear the menu out of the screen. */
+   Fl_Group *saved = Fl_Group::current();
+   Fl_Group::current(NULL);
+   Fl_Sys_Menu_Bar *bar = new Fl_Sys_Menu_Bar(0, 0, 1, 1);
+   bar->menu(pm);
+   Fl_Group::current(saved);
+}
+
+#else /* !__APPLE__ */
+
+void a_Menu_sysmenubar_init(void)
+{
+}
+
+#endif /* __APPLE__ */

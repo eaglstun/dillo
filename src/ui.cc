@@ -292,19 +292,7 @@ static void search_cb(Fl_Widget *wid, void *data)
  */
 static void help_cb(Fl_Widget *w, void *)
 {
-   char *path = dStrconcat(DILLO_DOCDIR, "user_help.html", NULL);
-   BrowserWindow *bw = a_UIcmd_get_bw_by_widget(w);
-
-   if (access(path, R_OK) == 0) {
-      char *urlstr = dStrconcat("file:", path, NULL);
-      a_UIcmd_open_urlstr(bw, urlstr);
-      dFree(urlstr);
-   } else {
-      MSG("Can't read local help file at \"%s\"."
-          " Getting remote help...\n", path);
-      a_UIcmd_open_urlstr(bw, "https://dillo-browser.org/user_help.html");
-   }
-   dFree(path);
+   a_UIcmd_open_help(a_UIcmd_get_bw_by_widget(w));
 }
 
 /**
@@ -591,8 +579,15 @@ void UI::make_filemenu_button()
    btn->callback(filemenu_cb, this);
    btn->set_tooltip("File menu");
    btn->clear_visible_focus();
+#ifdef __APPLE__
+   /* The File menu lives in the system menu bar at the top of the screen
+    * (see a_Menu_sysmenubar_init), so keep it out of the window. Still build
+    * the button: the KEYS_FILE_MENU handler dereferences FileButton. */
+   btn->hide();
+#else
    if (!prefs.show_filemenu)
       btn->hide();
+#endif
 }
 
 
@@ -1044,8 +1039,14 @@ void UI::customize()
       Location->hide();
    if ( !prefs.show_search )
       Search->hide();
+#ifdef __APPLE__
+   /* Help is a top-level menu in the system menu bar (see
+    * a_Menu_sysmenubar_init), so keep the button out of the window. */
+   Help->hide();
+#else
    if ( !prefs.show_help )
       Help->hide();
+#endif
    if ( !prefs.show_progress_box ) {
       IProg->hide();
       PProg->hide();

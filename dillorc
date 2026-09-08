@@ -416,10 +416,13 @@ ui_tab_bg_color=#b7beb7
 #show_stop=YES
 #show_bookmarks=YES
 #show_tools=YES
+# On macOS the File menu is always in the system menu bar, and this has no
+# effect.
 #show_filemenu=YES
 #show_clear_url=YES
 #show_url=YES
 #show_search=YES
+# On macOS Help is a menu in the system menu bar, and this has no effect.
 #show_help=YES
 #show_progress_box=YES
 

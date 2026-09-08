@@ -22,6 +22,7 @@
 #include <math.h>       /* for rint */
 #include <limits.h>     /* for UINT_MAX */
 #include <sys/stat.h>
+#include <unistd.h>   /* for access */
 
 #include <FL/Fl.H>
 #include <FL/Fl_Widget.H>
@@ -933,6 +934,26 @@ void a_UIcmd_home(void *vbw, int nt)
 }
 
 /*
+ * Open the user help page: the local copy if it is installed, otherwise the
+ * one on the website.
+ */
+void a_UIcmd_open_help(BrowserWindow *bw)
+{
+   char *path = dStrconcat(DILLO_DOCDIR, "user_help.html", NULL);
+
+   if (access(path, R_OK) == 0) {
+      char *urlstr = dStrconcat("file:", path, NULL);
+      a_UIcmd_open_urlstr(bw, urlstr);
+      dFree(urlstr);
+   } else {
+      MSG("Can't read local help file at \"%s\"."
+          " Getting remote help...\n", path);
+      a_UIcmd_open_urlstr(bw, "https://dillo-browser.org/user_help.html");
+   }
+   dFree(path);
+}
+
+/*
  * Reload current URL
  */
 void a_UIcmd_reload(void *vbw)
@@ -950,6 +971,28 @@ BrowserWindow *a_UIcmd_get_first_active_bw(void)
    }
 
    return NULL;
+}
+
+/*
+ * Return the bw of the tab shown in the frontmost window, or NULL if there
+ * is none. Used by the macOS system menu bar, which is application-global
+ * and so must resolve its target window at click time.
+ */
+BrowserWindow *a_UIcmd_get_active_bw(void)
+{
+   for (Fl_Window *win = Fl::first_window(); win; win = Fl::next_window(win)) {
+      for (struct Tabgroup *tg = tabgroups; tg; tg = tg->next) {
+         if (tg->tabs->window() == win) {
+            BrowserWindow *bw =
+               a_UIcmd_get_bw_by_widget(tg->tabs->wizard()->value());
+            if (bw)
+               return bw;
+         }
+      }
+   }
+
+   /* No browser window on top (a dialog, say): fall back to any of them. */
+   return a_UIcmd_get_first_active_bw();
 }
 
 /*

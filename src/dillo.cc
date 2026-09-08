@@ -40,6 +40,7 @@
 #include "msg.h"
 #include "paths.hh"
 #include "uicmd.hh"
+#include "menu.hh"
 
 #include "prefs.h"
 #include "prefsparser.hh"
@@ -572,6 +573,10 @@ int main(int argc, char **argv)
     * immediately-available URLs from the cmdline (e.g. about:splash).
     */
    ((Fl_Widget *)bw->ui)->window()->make_current();
+
+   /* On macOS this puts the File menu in the menu bar at the top of the
+    * screen; elsewhere it does nothing. */
+   a_Menu_sysmenubar_init();
 
    /* Proxy authentication */
    if (prefs.http_proxyuser && !a_Http_proxy_auth()) {
