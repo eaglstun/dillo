@@ -8,6 +8,7 @@
 	<key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
 	<key>CFBundleName</key>			<string>Dillo</string>
 	<key>CFBundleDisplayName</key>		<string>Dillo</string>
+	<key>CFBundleIconFile</key>		<string>Dillo.icns</string>
 	<key>CFBundlePackageType</key>		<string>APPL</string>
 	<key>CFBundleSignature</key>		<string>????</string>
 	<key>CFBundleShortVersionString</key>	<string>@VERSION@</string>
