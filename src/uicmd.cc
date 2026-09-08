@@ -24,6 +24,10 @@
 #include <sys/stat.h>
 #include <unistd.h>   /* for access */
 
+#ifdef __APPLE__
+#  include <CoreServices/CoreServices.h>
+#endif
+
 #include <FL/Fl.H>
 #include <FL/Fl_Widget.H>
 #include <FL/Fl_Double_Window.H>
@@ -933,12 +937,70 @@ void a_UIcmd_home(void *vbw, int nt)
       a_UIcmd_open_url((BrowserWindow*)vbw, prefs.home);
 }
 
+#ifdef __APPLE__
+/*
+ * Show the Apple help book, if this copy of dillo is running from an
+ * application bundle that declares one (see mac/Info.plist.in).
+ *
+ * Returns FALSE when there is no help book, so the caller can fall back to
+ * opening the manual in a tab. Only the book's main page is reachable this
+ * way; the manual remains the full reference.
+ */
+static bool_t UIcmd_show_help_book(void)
+{
+   CFBundleRef bundle = CFBundleGetMainBundle();
+   CFStringRef name;
+   char book[256], url[320];
+   uint_t o = 0;
+
+   if (!bundle)
+      return FALSE;
+   name = (CFStringRef) CFBundleGetValueForInfoDictionaryKey(bundle,
+             CFSTR("CFBundleHelpBookName"));
+   if (!name || CFGetTypeID(name) != CFStringGetTypeID() ||
+       !CFStringGetCString(name, book, sizeof(book), kCFStringEncodingUTF8))
+      return FALSE;
+
+   /* The book name comes from our own Info.plist, so escaping spaces is
+    * enough to make a valid help: URL out of it. */
+   strcpy(url, "help:openbook=");
+   o = strlen(url);
+   for (uint_t i = 0; book[i] && o + 4 < sizeof(url); i++) {
+      if (book[i] == ' ') {
+         memcpy(url + o, "%20", 3);
+         o += 3;
+      } else {
+         url[o++] = book[i];
+      }
+   }
+   url[o] = '\0';
+
+   CFStringRef str = CFStringCreateWithCString(NULL, url,
+                                               kCFStringEncodingUTF8);
+   CFURLRef cfurl = CFURLCreateWithString(NULL, str, NULL);
+   bool_t ok = FALSE;
+
+   if (cfurl) {
+      ok = (LSOpenCFURLRef(cfurl, NULL) == noErr);
+      CFRelease(cfurl);
+   }
+   CFRelease(str);
+   return ok;
+}
+#endif /* __APPLE__ */
+
 /*
  * Open the user help page: the local copy if it is installed, otherwise the
  * one on the website.
  */
 void a_UIcmd_open_help(BrowserWindow *bw, const char *fragment)
 {
+#ifdef __APPLE__
+   /* No fragment means the plain "Dillo Help" entry: prefer the help book. */
+   if (!fragment && UIcmd_show_help_book())
+      return;
+#endif
+
    /* Installed copy first, then the one built in an uninstalled tree. */
    const char *dirs[] = { DILLO_DOCDIR, DILLO_BUILD_DOCDIR };
    char *urlstr = NULL;

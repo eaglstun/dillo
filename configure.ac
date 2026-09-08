@@ -929,6 +929,7 @@ case "$target_os" in
   *)       bundled_fonts_ok="no"  ;;
 esac
 AM_CONDITIONAL([BUNDLE_FONTS],  [test "x$bundled_fonts_ok" = "xyes"])
+AM_CONDITIONAL([MACOS_APP],     [test "x$bundled_fonts_ok" = "xyes"])
 
 AM_CONDITIONAL([GIT_AVAILABLE],  [test "x$git_ok" = "xyes"])
 
@@ -966,6 +967,8 @@ AC_CONFIG_FILES([
     lout/Makefile
     src/Makefile
     src/IO/Makefile
+    mac/Makefile
+    mac/Info.plist
     test/Makefile
     test/unit/Makefile
     test/dw/Makefile
