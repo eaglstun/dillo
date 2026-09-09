@@ -38,6 +38,10 @@
 #include "prefs.h"
 #include "dlib/dlib.h"
 
+#ifdef __APPLE__
+#  include "macosfiledialog.hh"
+#endif
+
 /*
  * Local Data
  */
@@ -298,10 +302,13 @@ const char *a_Dialog_passwd(const char *title, const char *msg)
 const char *a_Dialog_save_file(const char *title,
                                const char *pattern, const char *fname)
 {
-   /* a_Dialog_select_file() (file inputs) comes through here as well */
    if (Dialog_suppressed("file chooser", title, fname))
       return NULL;
+#ifdef __APPLE__
+   return a_Mac_save_file_dialog(title, pattern, fname);
+#else
    return fl_file_chooser(title, pattern, fname);
+#endif
 }
 
 /**
@@ -312,11 +319,9 @@ const char *a_Dialog_save_file(const char *title,
 const char *a_Dialog_select_file(const char *title,
                                  const char *pattern, const char *fname)
 {
-   /*
-    * FileChooser::type(MULTI) appears to allow multiple files to be selected,
-    * but just follow save_file's path for now.
-    */
-   return a_Dialog_save_file(title, pattern, fname);
+   if (Dialog_suppressed("file chooser", title, fname))
+      return NULL;
+   return fl_file_chooser(title, pattern, fname);
 }
 
 /**
@@ -554,4 +559,3 @@ int a_Dialog_user_password(const char *title, const char *msg,
 
    return ok;
 }
-

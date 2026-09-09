@@ -1225,6 +1225,11 @@ void a_UIcmd_init(void)
  */
 static int UIcmd_save_file_check(const char *name)
 {
+#ifdef __APPLE__
+   /* NSSavePanel already presents the native replacement confirmation. */
+   (void)name;
+   return 2;
+#else
    struct stat ss;
    if (stat(name, &ss) == 0) {
       Dstr *ds;
@@ -1240,6 +1245,7 @@ static int UIcmd_save_file_check(const char *name)
    } else {
       return 2; /* assume the file does not exist, so Continue */
    }
+#endif
 }
 
 /*
