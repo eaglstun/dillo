@@ -79,17 +79,33 @@ final class PageLoader {
             let isTextish = contentType.contains("text/")
                 || contentType.contains("json")
                 || contentType.contains("xml")
-            guard isHTML || isTextish else {
+            let rasterExtensions: Set<String> = [
+                "bmp", "gif", "heic", "heif", "ico", "jpeg", "jpg",
+                "png", "tif", "tiff", "webp",
+            ]
+            let isRasterImage =
+                (contentType.hasPrefix("image/")
+                    && !contentType.contains("svg"))
+                || rasterExtensions.contains(url.pathExtension.lowercased())
+            guard isHTML || isTextish || isRasterImage else {
                 DispatchQueue.main.async {
                     completion(.failure(.notHTML(contentType)))
                 }
                 return
             }
 
-            var html = Self.decode(
-                data, headerEncoding: response?.textEncodingName,
-                sniffMeta: isHTML)
-            if !isHTML {
+            var html: String
+            if isRasterImage {
+                // Feed top-level images back through the same <img> path used
+                // by normal pages. The engine will fetch and decode the image
+                // asynchronously via ImageIO.
+                html = Self.wrapAsImage(url: finalURL)
+            } else {
+                html = Self.decode(
+                    data, headerEncoding: response?.textEncodingName,
+                    sniffMeta: isHTML)
+            }
+            if isTextish && !isHTML {
                 // Plain text / JSON: present verbatim, monospaced.
                 html = Self.wrapAsPre(html, title: finalURL)
             }
@@ -108,6 +124,16 @@ final class PageLoader {
             .replacingOccurrences(of: ">", with: "&gt;")
         return "<html><head><title>\(title)</title></head>"
             + "<body><pre>\(escaped)</pre></body></html>"
+    }
+
+    private static func wrapAsImage(url: String) -> String {
+        let escaped = url
+            .replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "\"", with: "&quot;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
+        return "<html><head><title>\(escaped)</title></head>"
+            + "<body><img src=\"\(escaped)\" alt=\"\(escaped)\"></body></html>"
     }
 
     // MARK: - Charset decoding

@@ -963,6 +963,15 @@ static void Menu_sysmenu_file_cb(Fl_Widget *wid, void *data)
    }
 }
 
+/** Open the native web-search dialog for the frontmost browser window. */
+static void Menu_sysmenu_search_cb(Fl_Widget*, void*)
+{
+   BrowserWindow *bw = a_UIcmd_get_active_bw();
+
+   if (bw)
+      a_UIcmd_search_dialog(bw);
+}
+
 /**
  * Callback for the Help menu's manual entries.
  *
@@ -1006,7 +1015,9 @@ void a_Menu_sysmenubar_init(void)
          {"Open File...", FL_COMMAND + 'o', Menu_sysmenu_file_cb,
           (void*)"of",0,0,0,0,0},
          {"Open Location...", FL_COMMAND + 'l', Menu_sysmenu_file_cb,
-          (void*)"ou", FL_MENU_DIVIDER,0,0,0,0},
+          (void*)"ou",0,0,0,0,0},
+         {"Search the Web...", FL_CTRL + 's', Menu_sysmenu_search_cb,
+          0, FL_MENU_DIVIDER,0,0,0,0},
          {"Close Tab", FL_COMMAND + 'w', Menu_sysmenu_file_cb,
           (void*)"cw",0,0,0,0,0},
          {0,0,0,0,0,0,0,0,0},

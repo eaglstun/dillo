@@ -203,6 +203,8 @@ What was built:
 Known image gaps: srcset/lazy-loaded images whose real URL never appears
 in `src` don't load; no SVG; no progressive/partial rendering (each image
 appears complete when its fetch finishes); no image cache across pages.
+Top-level raster image URLs are wrapped as a minimal image document and use
+the same ImageIO pipeline as inline images.
 
 ## Milestone 3 — a real browser
 

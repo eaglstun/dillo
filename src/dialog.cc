@@ -40,6 +40,7 @@
 
 #ifdef __APPLE__
 #  include "macosfiledialog.hh"
+#  include "macossearchdialog.hh"
 #endif
 
 /*
@@ -208,6 +209,46 @@ const char *a_Dialog_input(const char *title, const char *msg)
 
    if (!(title && *title))
       title = "Dillo: Input";
+
+#ifdef __APPLE__
+   {
+      int n = dList_length(prefs.search_urls);
+      char **labels = (char **)calloc((size_t)n, sizeof(char *));
+      int *sourceIndexes = (int *)calloc((size_t)n, sizeof(int));
+      int selected = 0, valid = 0, chosen = 0;
+
+      if (!labels || !sourceIndexes) {
+         MSG("calloc failed: %s\n", strerror(errno));
+         free(labels);
+         free(sourceIndexes);
+         return NULL;
+      }
+
+      for (int i = 0; i < n; i++) {
+         char *label, *url;
+         char *source = (char *)dList_nth_data(prefs.search_urls, i);
+         if (!source || a_Misc_parse_search_url(source, &label, &url) < 0)
+            continue;
+         labels[valid] = dStrdup(label);
+         sourceIndexes[valid] = i;
+         if (i == prefs.search_url_idx)
+            selected = valid;
+         valid++;
+      }
+
+      chosen = selected;
+      const char *answer = a_Mac_search_dialog(
+         title, msg, (const char *const *)labels, valid, selected, &chosen);
+      if (answer && chosen >= 0 && chosen < valid)
+         prefs.search_url_idx = sourceIndexes[chosen];
+
+      for (int i = 0; i < valid; i++)
+         dFree(labels[i]);
+      free(labels);
+      free(sourceIndexes);
+      return answer;
+   }
+#endif
 
    Fl_Window *window = new Fl_Window(ww,wh,title);
    window->set_modal();
