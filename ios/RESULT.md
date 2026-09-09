@@ -22,21 +22,57 @@ until the browser is ready; running apps navigate their active browser.
 Verified on September 8, 2026 with an iOS 16 simulator-targeted build and a
 live macOS URL event into the built app bundle.
 
-## Milestone 7 — basic pinch zoom
+## Milestone 7 — pinch zoom
 
-Two-finger pinch now changes Dillo's real document zoom from 50–300% in
-10% steps. This is reflow zoom, not bitmap magnification: the bridge retains
-the pristine HTML source, updates `BrowserWindow::zoom`, and rebuilds the
-widget tree so font sizes and CSS pixel lengths are recomputed. The shell
-clamps the new scroll offset to the resized canvas and approximately keeps
-the point between the user's fingers stationary. It can recognize alongside
-the scroll view's pan gesture, and reports the final percentage in the title
+Two-finger pinch changes Dillo's real document zoom across 50–300%. This is
+reflow zoom, not bitmap magnification: the bridge retains the pristine HTML
+source, updates `BrowserWindow::zoom`, and rebuilds the widget tree so font
+sizes and CSS pixel lengths are recomputed. The shell clamps the new scroll
+offset to the resized canvas and approximately keeps the point between the
+user's fingers stationary, and reports the final percentage in the title
 status line.
 
-Verified by a clean simulator build and launch on September 8, 2026. The
-gesture itself still needs hands-on feel testing; zoom reparsing also resets
-transient form values, which is acceptable for this first pass but should be
-revisited before calling M7 finished. Double-tap fit-width remains open.
+**Two-phase gesture (revised).** The first pass reflowed on every gesture
+update, which meant quantizing to 10% steps to stay responsive — and those
+steps were plainly visible while pinching. The handler now splits the work:
+`.changed` only applies a `CGAffineTransform` to the viewport-sized render
+view, anchored so the point between the fingers holds still; `.ended` drops
+the transform and performs exactly **one** `applyZoom` at the final,
+unquantized value. Continuous tracking, one reparse per gesture instead of
+one per step, and — since re-parsing drops transient form values — that loss
+now happens at most once per gesture. The preview is bitmap-scaled, so text
+is soft until the fingers lift, which is what every other mobile browser
+does.
+
+**Overdrawn preview.** Transforming the render view directly was smooth but
+cropped: it only ever paints the *visible* slice, so shrinking it revealed
+nothing beyond the edges of whatever had been on screen when the fingers
+landed — the page appeared to be trimmed to the chrome. The preview is now a
+separate image painted from a slice **larger** than the viewport (the bridge
+takes an arbitrary canvas rect), held in a clipped, non-interactive overlay
+with the render view hidden beneath it. Zooming out therefore has real
+content to expose.
+
+Overdraw is capped at 2.5× so the one oversized repaint stays affordable —
+fully covering a zoom-out needs `startZoom / minZoom`, which reaches 6× from
+300% and would be a ~185 MB bitmap. Past the cap, `.changed` clamps the
+preview at its own painted edge instead of letting the gutter show: it
+saturates while the fingers keep going, and release resolves to the true
+zoom. Where the overdraw is not capped, that clamp is exactly the reachable
+zoom limit and never bites.
+
+One more detail: scrolling is parked for the duration of the preview (the
+render view paints the slice at the current offset, so panning under a
+scaled preview would repaint content that no longer lines up).
+
+Verified September 9, 2026: clean simulator build, install, and launch on
+iPhone 16 Pro rendering the live Dillo site. The geometry was checked
+separately across six starting zooms × four pinch points × the full
+reachable scale range: the preview registers over the viewport to
+0.000000000 pt, the pinch point holds to 0.000000000 pt of drift, and no
+combination leaves an uncovered gap at full zoom-out. Smoothness confirmed
+by hand; the crop on zoom-out was reported from hands-on use and is what
+the overdrawn preview above fixes. Double-tap fit-width remains open.
 
 ## Milestone 6 — navigation polish (the M8 list)
 
