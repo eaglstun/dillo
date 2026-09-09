@@ -26,6 +26,7 @@
 
 #ifdef __APPLE__
 #  include <CoreServices/CoreServices.h>
+#  include "macosnative_tabs.hh"
 #endif
 
 #include <FL/Fl.H>
@@ -158,6 +159,9 @@ public:
       Pack = NULL;
       focus_counter = 0;
       tab_w = 50, tab_h = th, ctab_h = 1, btn_w = 20, ctl_w = 1*btn_w+2;
+#ifdef __APPLE__
+      ctab_h = 0;
+#endif
       resize(0,0,ww,ctab_h);
       /* tab buttons go inside a pack within a scroll */
       Scroll = new Fl_Scroll(0,0,ww-ctl_w,ctab_h);
@@ -479,18 +483,26 @@ void CustTabs::switch_tab(CustTabButton *cbtn)
 
 void CustTabs::prev_tab()
 {
+#ifdef __APPLE__
+   a_Mac_tabs_select_relative(window(), -1);
+#else
    int idx;
 
    if ((idx = get_btn_idx((UI*)Wizard->value())) != -1)
       switch_tab((CustTabButton*)Pack->child(idx>0 ? idx-1 : num_tabs()-1));
+#endif
 }
 
 void CustTabs::next_tab()
 {
+#ifdef __APPLE__
+   a_Mac_tabs_select_relative(window(), 1);
+#else
    int idx;
 
    if ((idx = get_btn_idx((UI*)Wizard->value())) != -1)
       switch_tab((CustTabButton*)Pack->child((idx+1<num_tabs()) ? idx+1 : 0));
+#endif
 }
 
 /**
@@ -498,8 +510,12 @@ void CustTabs::next_tab()
  */
 void CustTabs::switch_tab(int index)
 {
+#ifdef __APPLE__
+   a_Mac_tabs_select_index(window(), index);
+#else
    if (index >= 0 && index < num_tabs())
       switch_tab((CustTabButton*)Pack->child(index));
+#endif
 }
 
 /**
@@ -507,6 +523,9 @@ void CustTabs::switch_tab(int index)
  */
 void CustTabs::set_tab_label(UI *ui, const char *label)
 {
+#ifdef __APPLE__
+   a_Mac_tabs_set_title(ui->window(), label);
+#endif
    char title[128];
    int idx = get_btn_idx(ui);
 
@@ -608,6 +627,9 @@ BrowserWindow *a_UIcmd_browser_window_new(int ww, int wh,
    int focus = 1;
    new_bw = UIcmd_tab_new(DilloTabs, old_ui, focus);
    win->show();
+#ifdef __APPLE__
+   a_Mac_tabs_configure(win);
+#endif
 
    if (old_bw == NULL) {
       new_bw->zoom = prefs.zoom_factor;
@@ -718,6 +740,9 @@ void a_UIcmd_close_bw(void *vbw)
             _MSG("gone: tmp=%p tabgroups=%p\n", (void *) tmp, (void *) tabgroups);
             delete tmp;
          }
+#ifdef __APPLE__
+         a_Mac_tabs_remove(tabs->window());
+#endif
          delete tabs->window();
       }
    }
@@ -871,8 +896,15 @@ void a_UIcmd_open_url_nw(BrowserWindow *bw, const DilloUrl *url)
 void a_UIcmd_open_url_nt(void *vbw, const DilloUrl *url, int focus)
 {
    BrowserWindow *bw = (BrowserWindow *)vbw;
+#ifdef __APPLE__
+   int w, h;
+   a_UIcmd_get_wh(bw, &w, &h);
+   BrowserWindow *new_bw = a_UIcmd_browser_window_new(w, h, 0, bw);
+   a_Mac_tabs_add(BW2UI(bw)->window(), BW2UI(new_bw)->window(), focus);
+#else
    BrowserWindow *new_bw = UIcmd_tab_new(BW2UI(bw)->tabs(),
                                          bw ? BW2UI(bw) : NULL, focus);
+#endif
    /* Preserve same zoom factor in new tab */
    new_bw->zoom = bw->zoom;
    UIcmd_open_url_nbw(new_bw, url);
@@ -1055,6 +1087,16 @@ BrowserWindow *a_UIcmd_get_first_active_bw(void)
  */
 BrowserWindow *a_UIcmd_get_active_bw(void)
 {
+#ifdef __APPLE__
+   for (struct Tabgroup *tg = tabgroups; tg; tg = tg->next) {
+      if (a_Mac_tabs_is_front(tg->tabs->window())) {
+         BrowserWindow *bw =
+            a_UIcmd_get_bw_by_widget(tg->tabs->wizard()->value());
+         if (bw)
+            return bw;
+      }
+   }
+#endif
    for (Fl_Window *win = Fl::first_window(); win; win = Fl::next_window(win)) {
       for (struct Tabgroup *tg = tabgroups; tg; tg = tg->next) {
          if (tg->tabs->window() == win) {
@@ -1077,6 +1119,10 @@ void a_UIcmd_reload_all_active()
 {
    struct Tabgroup *tg = tabgroups;
    for (tg = tabgroups; tg; tg = tg->next) {
+#ifdef __APPLE__
+      if (!a_Mac_tabs_is_selected(tg->tabs->window()))
+         continue;
+#endif
       BrowserWindow *bw = a_UIcmd_get_bw_by_widget(tg->tabs->wizard()->value());
       if (bw)
          a_UIcmd_reload(bw);

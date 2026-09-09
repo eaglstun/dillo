@@ -33,6 +33,7 @@
 
 #ifdef __APPLE__
 #include "macoscontextmenu.hh"
+#include "macosnative_tabs.hh"
 #endif
 
 #include <unistd.h>
@@ -963,6 +964,11 @@ void a_Menu_tools_popup(BrowserWindow *bw, int x, int y)
  */
 static void Menu_sysmenu_file_cb(Fl_Widget *wid, void *data)
 {
+#ifdef __APPLE__
+   if (strcmp((const char *)data, "cw") == 0 &&
+       a_Mac_tabs_close_selected())
+      return;
+#endif
    BrowserWindow *bw = a_UIcmd_get_active_bw();
 
    if (bw) {

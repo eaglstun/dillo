@@ -58,6 +58,16 @@ menu construction in `menu.cc` so the Objective-C++ file remains presentation
 glue only. The popup uses screen coordinates because Dillo opens it from a
 zero-delay timeout after the originating `NSEvent` has unwound.
 
+**Native tabs.** On macOS, each Dillo tab is a complete FLTK window joined to an
+AppKit `NSWindowTabGroup`; other platforms still multiplex `UI` instances through
+the in-window `CustTabs`/`Fl_Wizard`. `src/macosnative_tabs.mm` owns the AppKit
+grouping, selection, title, and removal glue. It also preserves each pre-group
+`NSWindow` identity because FLTK 1.3's `fl_xid()` is not stable after AppKit tabs
+windows together. New-window commands remain separate; new-tab commands create a
+window and explicitly attach it to the source window's group. Keep the native
+group removal ahead of deleting the corresponding `Fl_Window`, or closing one tab
+can tear down the whole group.
+
 **Help menu.** Entries deep-link into `doc/user_help.in.html` by anchor — each item's
 `user_data` is the anchor id, and `a_UIcmd_open_help(bw, fragment)` appends it. Adding
 a section means adding an `id="..."` there and a menu entry here; nothing else knows
