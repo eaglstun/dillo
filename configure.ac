@@ -160,9 +160,11 @@ fi
 
 AC_PROG_CC
 AC_PROG_CXX
-case "$target_os" in
-  darwin*) AC_PROG_OBJCXX ;;
-esac
+dnl Automake sees the conditional .mm sources in src/Makefile.am on every host
+dnl and therefore always emits its Objective-C++ dependency conditional. Run
+dnl the probe everywhere so that conditional is initialized; the compiler is
+dnl only used when MACOS_APP actually adds the .mm sources on Darwin.
+AC_PROG_OBJCXX
 AC_PROG_RANLIB
 AC_PROG_CPP
 
