@@ -100,9 +100,10 @@ testing.
 
 ### M7 — Zoom + wide pages (pinch implemented; fit-width open)
 
-Pinch gesture now updates `bw->zoom` in 10% steps and reparses the retained
-HTML source (the StyleEngine resolves zoom while building styles). The shell
-approximately preserves the canvas point under the gesture while reflowing.
+Pinch previews continuously with a layer transform and, on release, updates
+`bw->zoom` once and reparses the retained HTML source (the StyleEngine
+resolves zoom while building styles). The shell approximately preserves the
+canvas point under the gesture while reflowing.
 Double-tap to toggle fit-width for pages wider than the viewport (which
 currently wrap at min-width and pan horizontally).
 

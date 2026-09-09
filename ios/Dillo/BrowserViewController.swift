@@ -52,6 +52,16 @@ final class BrowserViewController: UIViewController {
     private var pinchStartZoom: CGFloat = 1
     private var pinchStartCanvasPoint = CGPoint.zero
     private var pinchViewportPoint = CGPoint.zero
+    private var pinchPreviewClip: UIView?
+    private var pinchPreviewImage: UIImageView?
+    /// How much larger than the viewport the current preview was painted.
+    private var pinchOverdraw: CGFloat = 1
+    /// Gesture range. The bridge clamps to the wider desktop limits itself.
+    private let minZoom: CGFloat = 0.5
+    private let maxZoom: CGFloat = 3
+    /// How much wider/taller than the viewport the pinch preview is painted.
+    /// Bounds the cost of the one oversized repaint at gesture start.
+    private let maxPreviewOverdraw: CGFloat = 2.5
 
     private let findBar = UIStackView()
     private let findField = UITextField()
@@ -355,6 +365,17 @@ final class BrowserViewController: UIViewController {
         }
     }
 
+    /// Pinch zoom in two halves: a continuous transform of a pre-painted
+    /// preview for as long as the fingers are down, then exactly one reflow
+    /// when they lift.
+    ///
+    /// Rebuilding the Dillo widget tree is far more work than scaling an
+    /// already-painted layer, so reflowing per gesture update forced coarse
+    /// steps to stay responsive. Previewing with a transform instead keeps
+    /// the gesture continuous, costs one reparse per gesture rather than one
+    /// per step, and — since re-parsing drops transient form values — loses
+    /// those at most once. The trade is that the preview is bitmap-scaled,
+    /// so text is soft until the fingers lift.
     @objc private func handlePinch(_ gr: UIPinchGestureRecognizer) {
         switch gr.state {
         case .began:
@@ -363,40 +384,139 @@ final class BrowserViewController: UIViewController {
             pinchStartCanvasPoint = CGPoint(
                 x: scrollView.contentOffset.x + pinchViewportPoint.x,
                 y: scrollView.contentOffset.y + pinchViewportPoint.y)
+            // The render view is viewport-sized and paints the slice at the
+            // current offset, so scrolling underneath a scaled preview would
+            // repaint content that no longer lines up with it.
+            scrollView.isScrollEnabled = false
+            beginPinchPreview()
 
-        case .changed, .ended:
-            // Rebuilding the Dillo widget tree is substantially more work than
-            // changing a layer transform. Ten-percent steps keep the gesture
-            // responsive and match desktop Dillo's zoom commands.
-            let proposed = min(3, max(0.5, pinchStartZoom * gr.scale))
-            let stepped = (proposed * 10).rounded() / 10
-            guard abs(stepped - zoomFactor) >= 0.05 else {
-                if gr.state == .ended {
-                    flashStatus("Zoom: \(Int(zoomFactor * 100))%")
-                }
-                return
+        case .changed:
+            if let preview = pinchPreviewImage {
+                // Never shrink the preview past its own painted edge — that
+                // is what would expose a gutter. Where the overdraw wasn't
+                // capped this clamp is exactly the reachable zoom limit and
+                // so never bites; past the cap the preview saturates while
+                // the fingers keep going, and release resolves it.
+                let scale = max(pinchScale(gr), 1 / pinchOverdraw)
+                preview.transform = pinchTransform(
+                    scale, about: preview.center)
             }
 
-            let relativeScale = stepped / pinchStartZoom
-            zoomFactor = CGFloat(bridge.applyZoom(Float(stepped)))
+        case .ended:
+            let wanted = pinchStartZoom * pinchScale(gr)
+            if abs(wanted - zoomFactor) >= 0.01 {
+                zoomFactor = CGFloat(bridge.applyZoom(Float(wanted)))
 
-            // Keep approximately the same canvas point under the fingers.
-            // Reflow can move individual lines, but this avoids jumping to the
-            // top-left as the newly sized canvas replaces the old one.
-            let wantedOffset = CGPoint(
-                x: pinchStartCanvasPoint.x * relativeScale
-                    - pinchViewportPoint.x,
-                y: pinchStartCanvasPoint.y * relativeScale
-                    - pinchViewportPoint.y)
-            setClampedContentOffset(wantedOffset)
-
-            if gr.state == .ended {
-                flashStatus("Zoom: \(Int(zoomFactor * 100))%")
+                // Keep approximately the same canvas point under the fingers.
+                // Reflow can move individual lines, but this avoids jumping to
+                // the top-left as the newly sized canvas replaces the old one.
+                let relativeScale = zoomFactor / pinchStartZoom
+                setClampedContentOffset(CGPoint(
+                    x: pinchStartCanvasPoint.x * relativeScale
+                        - pinchViewportPoint.x,
+                    y: pinchStartCanvasPoint.y * relativeScale
+                        - pinchViewportPoint.y))
             }
+            // Torn down only after the reflow, so the preview covers it and
+            // the crisp page is what appears when it goes.
+            endPinchPreview()
+            flashStatus("Zoom: \(Int(zoomFactor * 100))%")
+
+        case .cancelled, .failed:
+            endPinchPreview()
 
         default:
             break
         }
+    }
+
+    /// The zoom the fingers are asking for, as a multiple of the zoom that
+    /// was in effect when they landed.
+    private func pinchScale(_ gr: UIPinchGestureRecognizer) -> CGFloat {
+        let proposed = min(maxZoom, max(minZoom, pinchStartZoom * gr.scale))
+        return proposed / pinchStartZoom
+    }
+
+    /// Scale about the point the fingers landed on, so that point holds still
+    /// instead of the view growing from its own centre.
+    private func pinchTransform(
+        _ scale: CGFloat, about centre: CGPoint
+    ) -> CGAffineTransform {
+        return CGAffineTransform(
+            translationX: (1 - scale) * (pinchViewportPoint.x - centre.x),
+            y: (1 - scale) * (pinchViewportPoint.y - centre.y))
+            .scaledBy(x: scale, y: scale)
+    }
+
+    /// Paint a slice *larger* than the viewport into an image and scale that,
+    /// rather than the render view itself.
+    ///
+    /// The render view only ever paints the visible slice, so scaling it down
+    /// cropped the page to whatever happened to be on screen when the fingers
+    /// landed — there was nothing beyond its edges to reveal. Overdrawing at
+    /// gesture start gives zooming out real content to expose. The margin is
+    /// capped so the repaint stays affordable; a pinch that starts deeply
+    /// zoomed in can out-run it, which `.changed` absorbs by clamping the
+    /// preview rather than letting the page ground show through.
+    private func beginPinchPreview() {
+        let viewport = renderView.bounds
+        guard viewport.width > 0, viewport.height > 0 else { return }
+
+        // Only zooming out needs the margin, and only as far as this gesture
+        // could actually zoom out from where it started.
+        let overdraw = min(maxPreviewOverdraw, max(1, pinchStartZoom / minZoom))
+        pinchOverdraw = overdraw
+        let margin = CGSize(
+            width: viewport.width * (overdraw - 1) / 2,
+            height: viewport.height * (overdraw - 1) / 2)
+        let slice = CGRect(
+            x: scrollView.contentOffset.x - margin.width,
+            y: scrollView.contentOffset.y - margin.height,
+            width: viewport.width * overdraw,
+            height: viewport.height * overdraw)
+
+        let format = UIGraphicsImageRendererFormat.preferred()
+        // The preview is bitmap-scaled and short-lived; full device scale
+        // would multiply the cost of the oversized repaint for no real gain.
+        format.scale = min(2, traitCollection.displayScale)
+        format.opaque = true
+        let ground = renderView.backgroundColor ?? .white
+        let image = UIGraphicsImageRenderer(size: slice.size, format: format)
+            .image { context in
+                ground.setFill()
+                context.fill(CGRect(origin: .zero, size: slice.size))
+                self.bridge.draw(into: context.cgContext, visibleRect: slice)
+            }
+
+        // Clipped to exactly the render area so the oversized image cannot
+        // spill over the chrome, and non-interactive so the scroll view keeps
+        // receiving the gesture.
+        let clip = UIView(frame: renderView.frame)
+        clip.clipsToBounds = true
+        clip.isUserInteractionEnabled = false
+        clip.backgroundColor = ground
+
+        let preview = UIImageView(image: image)
+        preview.frame = CGRect(
+            origin: CGPoint(x: -margin.width, y: -margin.height),
+            size: slice.size)
+        clip.addSubview(preview)
+        view.addSubview(clip)
+
+        // Otherwise the crisp, un-zoomed render view shows through around the
+        // preview as it shrinks.
+        renderView.isHidden = true
+        pinchPreviewClip = clip
+        pinchPreviewImage = preview
+    }
+
+    private func endPinchPreview() {
+        pinchPreviewClip?.removeFromSuperview()
+        pinchPreviewClip = nil
+        pinchPreviewImage = nil
+        pinchOverdraw = 1
+        renderView.isHidden = false
+        scrollView.isScrollEnabled = true
     }
 
     private func setClampedContentOffset(_ proposed: CGPoint) {
@@ -580,7 +700,8 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
         shouldRecognizeSimultaneouslyWith otherGestureRecognizer:
             UIGestureRecognizer
     ) -> Bool {
-        // Let the scroll view's pan physics continue while two fingers pinch.
+        // A second finger landing mid-scroll must still start a pinch; the
+        // pinch handler is what actually parks scrolling while it previews.
         return gestureRecognizer is UIPinchGestureRecognizer
             || otherGestureRecognizer is UIPinchGestureRecognizer
     }
