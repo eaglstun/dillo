@@ -83,6 +83,10 @@ static void filemenu_cb(Fl_Widget*, void *data)
       a_UIcmd_open_file(popup_bw);
    } else if (strcmp((char*)data, "ou") == 0) {
       a_UIcmd_focus_location(popup_bw);
+   } else if (strcmp((char*)data, "hi") == 0) {
+      a_UIcmd_history(popup_bw);
+   } else if (strcmp((char*)data, "ch") == 0) {
+      a_UIcmd_clear_history(popup_bw);
    } else if (strcmp((char*)data, "cw") == 0) {
       a_Timeout_add(0.0, a_UIcmd_close_bw, popup_bw);
    } else if (strcmp((char*)data, "ed") == 0) {
@@ -724,6 +728,10 @@ void a_Menu_file_popup(BrowserWindow *bw, void *v_wid)
        (void*)"of",0,0,0,0,0},
       {"Open URL...", Keys::getShortcut(KEYS_GOTO), filemenu_cb,
        (void*)"ou",0,0,0,0,0},
+      {"History", Keys::getShortcut(KEYS_HISTORY), filemenu_cb,
+       (void*)"hi",0,0,0,0,0},
+      {"Clear History...", 0, filemenu_cb,
+       (void*)"ch", FL_MENU_DIVIDER,0,0,0,0},
       {"Close", Keys::getShortcut(KEYS_CLOSE_TAB), filemenu_cb,
        (void*)"cw", FL_MENU_DIVIDER,0,0,0,0},
       {"Exit Dillo", Keys::getShortcut(KEYS_CLOSE_ALL), filemenu_cb,
@@ -1018,6 +1026,10 @@ void a_Menu_sysmenubar_init(void)
           (void*)"ou",0,0,0,0,0},
          {"Search the Web...", FL_CTRL + 's', Menu_sysmenu_search_cb,
           0, FL_MENU_DIVIDER,0,0,0,0},
+         {"History", FL_COMMAND + 'y', Menu_sysmenu_file_cb,
+          (void*)"hi",0,0,0,0,0},
+         {"Clear History...", 0, Menu_sysmenu_file_cb,
+          (void*)"ch", FL_MENU_DIVIDER,0,0,0,0},
          {"Close Tab", FL_COMMAND + 'w', Menu_sysmenu_file_cb,
           (void*)"cw",0,0,0,0,0},
          {0,0,0,0,0,0,0,0,0},

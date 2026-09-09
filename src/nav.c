@@ -355,6 +355,11 @@ void a_Nav_push(BrowserWindow *bw, const DilloUrl *url,
    const DilloUrl *e_url;
    dReturn_if_fail (bw != NULL);
 
+   /* about:history is dynamic, so refresh it whether it was opened from the
+    * menu, typed in the location bar, or followed as a link. */
+   if (strcmp(URL_STR(url), "about:history") == 0)
+      a_History_generate_page();
+
    e_url = a_Bw_expected_url(bw);
    if (e_url && !a_Url_cmp(e_url, url) &&
        !strcmp(URL_FRAGMENT(e_url),URL_FRAGMENT(url))) {

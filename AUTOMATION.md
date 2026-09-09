@@ -97,8 +97,10 @@ command is one line); checkbox/radio values are reported as `on:VALUE` /
 cancel/refuse default so a script can never hang on one.
 
 `cmd NAME` is thinner than it looks — `a_UIcmd_by_name` in `src/uicmd.cc` only
-implements `new-tab`, `close-tab`, `left-tab`, `right-tab`, `new-window`. Every
-other keybinding name returns -1.
+implements `new-tab`, `close-tab`, `left-tab`, `right-tab`, `new-window`, and
+`history`. Every other keybinding name returns -1. `cmd history` regenerates
+and opens `about:history`, so a subsequent `dump` returns the saved-history
+page.
 
 ### The fetch loop
 

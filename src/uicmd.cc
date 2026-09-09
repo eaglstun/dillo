@@ -1432,6 +1432,44 @@ void a_UIcmd_book(void *vbw, int nt)
 }
 
 /*
+ * Show the persistent browsing history.
+ */
+void a_UIcmd_history(void *vbw)
+{
+   BrowserWindow *bw = (BrowserWindow*)vbw;
+   const DilloUrl *current = a_Nav_stack_size(bw) ?
+                             a_History_get_url(NAV_TOP_UIDX(bw)) : NULL;
+   DilloUrl *url;
+
+   /* Opening an already-displayed URL is normally a no-op. Reload here so a
+    * second History command (especially after Clear History) refreshes it. */
+   if (current && strcmp(URL_STR(current), "about:history") == 0) {
+      a_History_generate_page();
+      a_UIcmd_reload(bw);
+      return;
+   }
+   url = a_Url_new("about:history", NULL);
+   a_UIcmd_open_url(bw, url);
+   a_Url_free(url);
+}
+
+/*
+ * Clear both the in-memory and on-disk browsing history after confirmation.
+ */
+void a_UIcmd_clear_history(void *vbw)
+{
+   BrowserWindow *bw = (BrowserWindow*)vbw;
+   int choice = a_Dialog_choice("Dillo: Clear browsing history?",
+      "This permanently removes the saved list of pages you have visited.",
+      "Cancel", "Clear History", NULL);
+
+   if (choice == 2) {
+      a_History_clear();
+      a_UIcmd_history(bw);
+   }
+}
+
+/*
  * Add a bookmark for a certain URL
  */
 void a_UIcmd_add_bookmark(BrowserWindow *bw, const DilloUrl *url)
@@ -1918,6 +1956,8 @@ int a_UIcmd_by_name(void *vbw, const char *cmd_name)
       tabs->next_tab();
    } else if (cmd == KEYS_NEW_WINDOW) {
       a_UIcmd_open_url_nw(bw, NULL);
+   } else if (cmd == KEYS_HISTORY) {
+      a_UIcmd_history(bw);
    } else {
       /* Unknown command or not implemented */
       return -1;

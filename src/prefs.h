@@ -63,6 +63,8 @@ typedef struct {
    int32_t ui_tab_height;
    int32_t ui_text_bg_color;
    bool_t contrast_visited_color;
+   bool_t save_history;
+   int32_t history_max_entries;
    bool_t show_tooltip;
    bool_t show_ui_tooltip;
    char *theme;

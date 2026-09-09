@@ -58,6 +58,8 @@ const char *a_UIcmd_select_file(void);
 void a_UIcmd_search_dialog(void *vbw);
 const char *a_UIcmd_get_passwd(const char *user);
 void a_UIcmd_book(void *vbw, int nt);
+void a_UIcmd_history(void *vbw);
+void a_UIcmd_clear_history(void *vbw);
 void a_UIcmd_add_bookmark(BrowserWindow *bw, const DilloUrl *url);
 void a_UIcmd_panels_toggle(BrowserWindow *bw);
 void a_UIcmd_findtext_dialog(BrowserWindow *bw);

@@ -306,7 +306,7 @@ bar to navigate among history pages.
 <h3 id="history">History</h3>
 <p>
 When you follow several links across different web pages, they are remembered in
-case you can to go back. Use the "Back" and "Forward" buttons of the panel to go
+case you want to go back. Use the "Back" and "Forward" buttons of the panel to go
 to the previous or next page. Click with the left button to open the page in the
 same tab or use the middle button to open it in a new tab.
 <p>
@@ -319,6 +319,18 @@ The <code>,</code> (comma) and <code>.</code> (dot) keys can be used to jump
 backwards or forward (mnemonic: those keys are usually labeled "&lt;" and
 "&gt;"). You can also use the back and forward buttons on your mouse if they are
 available.
+
+<p>Dillo also saves successfully opened HTTP and HTTPS pages across sessions.
+Choose <b>File &rarr; History</b> (Command-Y on macOS), or open
+<a href="about:history">about:history</a>, to see the newest visits first. Use
+<b>File &rarr; Clear History</b> to erase the saved list without disturbing the
+Back and Forward buttons in tabs that are already open.</p>
+
+<p>The history is stored in <code>~/.dillo/history.txt</code>. Set
+<code>save_history=NO</code> to keep history only until Dillo exits, or change
+<code>history_max_entries</code> from its default of 1000. A maximum of zero
+also keeps only the current session. Local file paths and internal Dillo pages
+are never written to the history file.</p>
 
 <h3 id="location-bar">Location bar</h3>
 <p>
@@ -956,4 +968,3 @@ If you find any issue, please report it via
 </div>
 </body>
 </html>
-

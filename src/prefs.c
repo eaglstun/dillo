@@ -43,6 +43,8 @@ void a_Prefs_init(void)
    prefs.bg_color = 0xdcd1ba;
    prefs.buffered_drawing = 1;
    prefs.contrast_visited_color = TRUE;
+   prefs.save_history = TRUE;
+   prefs.history_max_entries = 1000;
    prefs.enterpress_forces_submit = FALSE;
    prefs.focus_new_tab = FALSE;
    prefs.font_cursive = dStrdup(PREFS_FONT_CURSIVE);

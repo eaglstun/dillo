@@ -314,6 +314,12 @@ search_url="mj Mojeek https://www.mojeek.com/search?q=%s"
 # to allow better contrast with text/links/background
 #contrast_visited_color=YES
 
+# Save successfully opened pages in ~/.dillo/history.txt. Set the maximum to
+# zero to keep only session history. Only http: and https: pages are recorded;
+# internal pages and local file paths stay out of the history file.
+#save_history=YES
+#history_max_entries=1000
+
 
 #-------------------------------------------------------------------------
 #                        USER INTERFACE SECTION

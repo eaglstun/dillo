@@ -571,6 +571,8 @@ int main(int argc, char **argv)
    }
    dLib_show_messages(prefs.show_msg);
 
+   a_History_init(NULL);
+
    // initialize internal modules
    a_Dpi_init();
    a_Dns_init();
