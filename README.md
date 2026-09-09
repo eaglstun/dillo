@@ -38,7 +38,10 @@ Simulator and on device.
   on links and images, styled error pages.
 - **Pinch zoom** at 50–300% — reflow zoom, not bitmap magnification: the
   bridge re-parses the retained source and rebuilds the widget tree so font
-  sizes and CSS lengths are genuinely recomputed.
+  sizes and CSS lengths are genuinely recomputed. The gesture previews
+  continuously with a layer transform and reflows once, when the fingers
+  lift — so text is bitmap-soft mid-pinch and crisp the moment you let go.
+  That single reparse still clears transient form values.
 - **Shortcuts / Siri** via an _Open URL in Dillo_ App Intent, and the
   `dillo:` URL scheme.
 
