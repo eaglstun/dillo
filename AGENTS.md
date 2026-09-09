@@ -49,6 +49,15 @@ The in-window File button and `?` Help button are hidden on macOS, which makes
 `show_filemenu` and `show_help` in `dillorc` inert there. `FileButton` is still
 constructed: the `KEYS_FILE_MENU` handler dereferences it.
 
+**Context menus.** Page, link, image, and form right-click menus use native
+AppKit `NSMenu` presentation on macOS. `src/macoscontextmenu.mm` translates the
+existing `Fl_Menu_Item` hierarchy (including disabled items, checkmarks,
+dividers, and submenus) and returns the selected original item; `src/menu.cc`
+then runs the same callback as every other platform. Keep callback behavior and
+menu construction in `menu.cc` so the Objective-C++ file remains presentation
+glue only. The popup uses screen coordinates because Dillo opens it from a
+zero-delay timeout after the originating `NSEvent` has unwound.
+
 **Help menu.** Entries deep-link into `doc/user_help.in.html` by anchor — each item's
 `user_data` is the anchor id, and `a_UIcmd_open_help(bw, fragment)` appends it. Adding
 a section means adding an `id="..."` there and a menu entry here; nothing else knows

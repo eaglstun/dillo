@@ -31,6 +31,10 @@
 #include "keys.hh"
 #include "timeout.hh"
 
+#ifdef __APPLE__
+#include "macoscontextmenu.hh"
+#endif
+
 #include <unistd.h>
 
 /*
@@ -342,7 +346,11 @@ static void Menu_popup_cb(void *data)
 
    ((UI*)popup_bw->ui)->window()->cursor(FL_CURSOR_DEFAULT);
 
+#ifdef __APPLE__
+   picked = a_Mac_context_menu_popup(d->menu);
+#else
    picked = d->menu->popup(popup_x, popup_y, d->title, d->picked);
+#endif
    if (picked) {
       d->picked = picked;
       if (picked->callback())

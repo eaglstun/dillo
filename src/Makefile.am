@@ -10,6 +10,7 @@ AM_CPPFLAGS= \
 
 AM_CFLAGS = @LIBPNG_CFLAGS@
 AM_CXXFLAGS = @LIBPNG_CFLAGS@ @FLTK_CXXFLAGS@
+AM_OBJCXXFLAGS = $(AM_CXXFLAGS) -fobjc-arc
 
 SUBDIRS = IO
 
@@ -154,6 +155,12 @@ dillo_SOURCES = \
 	findbar.hh \
 	xembed.cc \
 	xembed.hh
+
+if MACOS_APP
+dillo_SOURCES += \
+	macoscontextmenu.hh \
+	macoscontextmenu.mm
+endif
 
 # https://www.gnu.org/software/automake/manual/html_node/Built-Sources-Example.html
 nodist_dillo_SOURCES = commit.h

@@ -160,6 +160,9 @@ fi
 
 AC_PROG_CC
 AC_PROG_CXX
+case "$target_os" in
+  darwin*) AC_PROG_OBJCXX ;;
+esac
 AC_PROG_RANLIB
 AC_PROG_CPP
 
