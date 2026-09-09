@@ -49,10 +49,21 @@ typedef const char *(*SelectFileHook) (void *ctx);
 /** Selected text should reach the system pasteboard. */
 typedef void (*CopyHook) (void *ctx, const char *text);
 
+enum ContextKind {
+   CONTEXT_PAGE,
+   CONTEXT_LINK,
+   CONTEXT_IMAGE
+};
+
+/** The engine resolved a context-menu hit at a canvas coordinate. */
+typedef void (*ContextHook) (void *ctx, ContextKind kind,
+                             const DilloUrl *url,
+                             const DilloUrl *linkUrl);
+
 /** Register the app-shell callbacks (pass NULLs to clear). */
 void setShellHooks (OpenUrlHook openUrl, TitleHook title,
                     ImageFetchHook imageFetch, SelectFileHook selectFile,
-                    CopyHook copy, void *ctx);
+                    CopyHook copy, ContextHook context, void *ctx);
 
 /* Called by the a_UIcmd_* stubs in BrowserStubs.cc / IosCapi.cc,
  * and by ApplePlatform::copySelection. */
@@ -61,6 +72,8 @@ void dispatchTitle (const char *title);
 bool dispatchImageFetch (DilloWeb *web, int clientKey);
 const char *dispatchSelectFile ();
 void dispatchCopy (const char *text);
+void dispatchContext (ContextKind kind, const DilloUrl *url,
+                      const DilloUrl *linkUrl);
 
 /**
  * Decode fetched image bytes (any ImageIO format) and feed them into the

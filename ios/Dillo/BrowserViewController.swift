@@ -43,6 +43,10 @@ final class BrowserViewController: UIViewController {
     private let titleLabel = UILabel()
     private let scrollView = UIScrollView()
     private let renderView = RenderView(frame: .zero)
+    private var contextMenuInfo: DilloContextInfo?
+    private var isSelectingText = false
+    private lazy var editMenuInteraction = UIEditMenuInteraction(
+        delegate: self)
 
     private var zoomFactor: CGFloat = 1
     private var pinchStartZoom: CGFloat = 1
@@ -228,6 +232,7 @@ final class BrowserViewController: UIViewController {
         scrollView.delegate = self
         scrollView.backgroundColor = .clear
         scrollView.keyboardDismissMode = .interactive
+        scrollView.addInteraction(editMenuInteraction)
 
         let tap = UITapGestureRecognizer(
             target: self, action: #selector(handleTap(_:)))
@@ -317,13 +322,26 @@ final class BrowserViewController: UIViewController {
         let p = gr.location(in: scrollView)
         switch gr.state {
         case .began:
+            if let context = bridge.contextInfo(
+                x: Int32(p.x), y: Int32(p.y)) {
+                contextMenuInfo = context
+                isSelectingText = false
+                let configuration = UIEditMenuConfiguration(
+                    identifier: nil, sourcePoint: p)
+                editMenuInteraction.presentEditMenu(with: configuration)
+                return
+            }
             // The drag extends the selection; it must not pan the page.
+            isSelectingText = true
             scrollView.isScrollEnabled = false
             bridge.selectionBegan(x: Int32(p.x), y: Int32(p.y))
         case .changed:
+            guard isSelectingText else { return }
             bridge.selectionMoved(x: Int32(p.x), y: Int32(p.y))
         case .ended, .cancelled:
+            guard isSelectingText else { return }
             bridge.selectionEnded(x: Int32(p.x), y: Int32(p.y))
+            isSelectingText = false
             scrollView.isScrollEnabled = true
         default:
             break
@@ -565,6 +583,65 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
         // Let the scroll view's pan physics continue while two fingers pinch.
         return gestureRecognizer is UIPinchGestureRecognizer
             || otherGestureRecognizer is UIPinchGestureRecognizer
+    }
+}
+
+extension BrowserViewController: UIEditMenuInteractionDelegate {
+    func editMenuInteraction(
+        _ interaction: UIEditMenuInteraction,
+        menuFor configuration: UIEditMenuConfiguration,
+        suggestedActions: [UIMenuElement]
+    ) -> UIMenu? {
+        guard let context = contextMenuInfo else { return nil }
+        var actions: [UIMenuElement] = []
+
+        func openAction(_ title: String, _ url: String) -> UIAction {
+            UIAction(title: title, image: UIImage(systemName: "safari")) {
+                [weak self] _ in
+                self?.navigate(to: url)
+            }
+        }
+
+        func copyAction(_ title: String, _ url: String) -> UIAction {
+            UIAction(title: title, image: UIImage(systemName: "doc.on.doc")) {
+                [weak self] _ in
+                UIPasteboard.general.string = url
+                self?.flashStatus("Copied address")
+            }
+        }
+
+        switch context.kind {
+        case .link:
+            actions.append(openAction("Open Link", context.url))
+            actions.append(copyAction("Copy Link", context.url))
+        case .image:
+            actions.append(openAction("Open Image", context.url))
+            actions.append(copyAction("Copy Image Address", context.url))
+            if let linkURL = context.linkURL {
+                actions.append(UIMenu(options: .displayInline, children: [
+                    openAction("Open Link", linkURL),
+                    copyAction("Copy Link", linkURL),
+                ]))
+            }
+        @unknown default:
+            return nil
+        }
+        return UIMenu(children: actions)
+    }
+
+    func editMenuInteraction(
+        _ interaction: UIEditMenuInteraction,
+        targetRectFor configuration: UIEditMenuConfiguration
+    ) -> CGRect {
+        CGRect(origin: configuration.sourcePoint, size: CGSize(width: 1, height: 1))
+    }
+
+    func editMenuInteraction(
+        _ interaction: UIEditMenuInteraction,
+        willDismissMenuFor configuration: UIEditMenuConfiguration,
+        animator: any UIEditMenuInteractionAnimating
+    ) {
+        contextMenuInfo = nil
     }
 }
 

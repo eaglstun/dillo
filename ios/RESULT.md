@@ -67,6 +67,11 @@ Everything below fell out of that plus thin UI:
   the selection lands on `UIPasteboard` via a new copy hook, with a
   "Copied: …" toast. Scrolling is disabled during the gesture — the pan
   recognizer wins otherwise.
+- **Native context menus**: long-pressing a rendered link or image now
+  runs the engine's existing right-click hit test and presents a UIKit edit
+  menu. Links can be opened or copied; images can be opened or have their
+  address copied, with both link actions retained for linked images. Long
+  presses on ordinary text still enter the existing drag-selection path.
 - **Chrome**: left-edge swipe navigates back; error pages got styling
   and a "Try again" link.
 

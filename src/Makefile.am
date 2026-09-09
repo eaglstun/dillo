@@ -164,6 +164,8 @@ dillo_SOURCES += \
 	macosfiledialog.mm \
 	macossearchdialog.hh \
 	macossearchdialog.mm \
+	macoslocation.hh \
+	macoslocation.mm \
 	macoscontextmenu.hh \
 	macoscontextmenu.mm
 endif

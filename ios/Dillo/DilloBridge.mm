@@ -67,6 +67,31 @@
 @implementation PendingImage
 @end
 
+@interface DilloContextInfo ()
+- (instancetype)initWithKind:(DilloContextKind)kind
+                          url:(NSString *)url
+                      linkURL:(nullable NSString *)linkURL;
+@end
+
+@implementation DilloContextInfo
+- (instancetype)initWithKind:(DilloContextKind)kind
+                          url:(NSString *)url
+                      linkURL:(nullable NSString *)linkURL
+{
+   self = [super init];
+   if (self) {
+      _kind = kind;
+      _url = [url copy];
+      _linkURL = [linkURL copy];
+   }
+   return self;
+}
+@end
+
+@interface DilloBridge ()
+@property (nonatomic, strong, nullable) DilloContextInfo *pendingContext;
+@end
+
 @implementation DilloBridge {
    dw::apple::ApplePlatform *_platform;   // owned by _layout
    dw::core::Layout *_layout;
@@ -106,6 +131,23 @@ static void copyTrampoline (void *ctx, const char *text)
    [UIPasteboard generalPasteboard].string = s;
    if (self.onCopy)
       self.onCopy (s);
+}
+
+static void contextTrampoline (void *ctx, dw::ios::ContextKind kind,
+                               const DilloUrl *url,
+                               const DilloUrl *linkUrl)
+{
+   DilloBridge *self = (__bridge DilloBridge *)ctx;
+   if (kind == dw::ios::CONTEXT_PAGE || !url)
+      return;
+
+   NSString *urlString = [NSString stringWithUTF8String:URL_STR (url)];
+   NSString *linkString = linkUrl ?
+      [NSString stringWithUTF8String:URL_STR (linkUrl)] : nil;
+   DilloContextKind shellKind = kind == dw::ios::CONTEXT_IMAGE ?
+      DilloContextKindImage : DilloContextKindLink;
+   self.pendingContext = [[DilloContextInfo alloc]
+      initWithKind:shellKind url:urlString linkURL:linkString];
 }
 
 static void openUrlTrampoline (void *ctx, const DilloUrl *url)
@@ -226,7 +268,8 @@ static void initDilloOnce (void)
 
    dw::ios::setShellHooks (openUrlTrampoline, titleTrampoline,
                            imageFetchTrampoline, selectFileTrampoline,
-                           copyTrampoline, (__bridge void *)self);
+                           copyTrampoline, contextTrampoline,
+                           (__bridge void *)self);
 
    return self;
 }
@@ -344,7 +387,7 @@ static void initDilloOnce (void)
 - (void)dealloc
 {
    [self cancelPendingImages];
-   dw::ios::setShellHooks (NULL, NULL, NULL, NULL, NULL, NULL);
+   dw::ios::setShellHooks (NULL, NULL, NULL, NULL, NULL, NULL, NULL);
    delete _layout;   // deletes platform, view, widget tree → DilloHtml
    a_Bw_free (_bw);
    dFree (_pageBuf);
@@ -473,6 +516,16 @@ static void initDilloOnce (void)
 {
    _layout->buttonPress (_view, 1, x, y, dw::core::BUTTON1_MASK, 1);
    _layout->buttonRelease (_view, 1, x, y, dw::core::BUTTON1_MASK, 1);
+}
+
+- (DilloContextInfo *)contextInfoAtX:(int)x y:(int)y
+{
+   self.pendingContext = nil;
+   _layout->buttonPress (_view, 1, x, y, dw::core::BUTTON3_MASK, 3);
+   _layout->buttonRelease (_view, 1, x, y, dw::core::BUTTON3_MASK, 3);
+   DilloContextInfo *result = self.pendingContext;
+   self.pendingContext = nil;
+   return result;
 }
 
 - (void)selectionBeganAtX:(int)x y:(int)y

@@ -22,6 +22,7 @@
 #include "../../src/bw.h"
 #include "../../src/web.hh"
 #include "../../src/hsts.h"
+#include "../../src/cache.h"
 #include "../../src/uicmd.hh"
 #include "../../src/dialog.hh"
 
@@ -39,17 +40,19 @@ static TitleHook titleHook = NULL;
 static ImageFetchHook imageFetchHook = NULL;
 static SelectFileHook selectFileHook = NULL;
 static CopyHook copyHook = NULL;
+static ContextHook contextHook = NULL;
 static void *hookCtx = NULL;
 
 void setShellHooks (OpenUrlHook openUrl, TitleHook title,
                     ImageFetchHook imageFetch, SelectFileHook selectFile,
-                    CopyHook copy, void *ctx)
+                    CopyHook copy, ContextHook context, void *ctx)
 {
    openUrlHook = openUrl;
    titleHook = title;
    imageFetchHook = imageFetch;
    selectFileHook = selectFile;
    copyHook = copy;
+   contextHook = context;
    hookCtx = ctx;
 }
 
@@ -82,6 +85,13 @@ void dispatchCopy (const char *text)
 {
    if (copyHook && text)
       copyHook (hookCtx, text);
+}
+
+void dispatchContext (ContextKind kind, const DilloUrl *url,
+                      const DilloUrl *linkUrl)
+{
+   if (contextHook)
+      contextHook (hookCtx, kind, url, linkUrl);
 }
 
 } // namespace ios
@@ -144,6 +154,13 @@ bool_t a_Hsts_require_https(const char *host)
    return FALSE;
 }
 
+/* about:history is generated into the desktop cache. The iOS shell keeps
+ * navigation history itself and never requests that internal cache page. */
+void a_Cache_entry_inject(const DilloUrl *url, const char *buf,
+                          size_t len, int flags)
+{
+}
+
 /*
  * ----- uicmd.cc (FLTK UI command layer) -----
  */
@@ -184,16 +201,19 @@ const char *a_UIcmd_select_file(void)
 
 void a_UIcmd_page_popup(void *vbw, bool_t has_bugs, void *v_cssUrls)
 {
+   dw::ios::dispatchContext (dw::ios::CONTEXT_PAGE, NULL, NULL);
 }
 
 void a_UIcmd_link_popup(void *vbw, const DilloUrl *url,
                         const DilloUrl *page_url)
 {
+   dw::ios::dispatchContext (dw::ios::CONTEXT_LINK, url, NULL);
 }
 
 void a_UIcmd_image_popup(void *vbw, const DilloUrl *url, bool_t loaded_img,
                          DilloUrl *page_url, DilloUrl *link_url)
 {
+   dw::ios::dispatchContext (dw::ios::CONTEXT_IMAGE, url, link_url);
 }
 
 void a_UIcmd_form_popup(void *vbw, const DilloUrl *url, void *vform,

@@ -13,6 +13,18 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
+typedef NS_ENUM(NSInteger, DilloContextKind) {
+   DilloContextKindLink,
+   DilloContextKindImage
+};
+
+/// Link/image metadata returned by an engine hit test.
+@interface DilloContextInfo : NSObject
+@property (nonatomic, readonly) DilloContextKind kind;
+@property (nonatomic, copy, readonly) NSString *url;
+@property (nonatomic, copy, readonly, nullable) NSString *linkURL;
+@end
+
 /// Owns one dw::core::Layout (ApplePlatform + CoreGraphicsView) — the iOS
 /// equivalent of a desktop browser window — and creates a fresh DilloHtml
 /// per page load. The Swift shell fetches; the bridge parses and paints.
@@ -71,6 +83,11 @@ NS_ASSUME_NONNULL_BEGIN
 
 /// Deliver a tap at canvas coordinates (engine hit-tests links).
 - (void)tapAtX:(int)x y:(int)y;
+
+/// Hit-test a long press using the engine's existing link/image context path.
+/// Plain page/text hits return nil so the shell can begin text selection.
+- (nullable DilloContextInfo *)contextInfoAtX:(int)x y:(int)y
+   NS_SWIFT_NAME(contextInfo(x:y:));
 
 /// Long-press selection gesture, forwarded as engine mouse events
 /// (press starts a selection, motion extends it, release copies it).

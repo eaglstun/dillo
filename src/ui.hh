@@ -132,6 +132,10 @@ class UI : public CustGroupVertical {
    Fl_Group *Panel, *Main, *LocationGroup;
    Fl_Output *StatusOutput;
    Findbar *FindBar;
+#ifdef __APPLE__
+   void *NativeLocation;
+   void sync_native_location();
+#endif
 
    int MainIdx;
    // Panel customization variables
@@ -157,10 +161,15 @@ public:
 
    /** To manage what events to catch and which to let pass */
    int handle(int event);
+   void draw();
+   void resize(int x, int y, int w, int h);
+   void show();
+   void hide();
 
    const char *get_location();
    void set_location(const char *str);
    void focus_location();
+   void submit_location();
    void focus_main();
    void set_status(const char *str);
    void set_page_prog(size_t nbytes, int cmd);
