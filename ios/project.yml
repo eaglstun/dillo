@@ -4,7 +4,7 @@ name: DilloSpike
 options:
   bundleIdPrefix: org.dillo
   deploymentTarget:
-    iOS: "15.0"
+    iOS: "16.0"
   createIntermediateGroups: true
 
 settings:
@@ -91,6 +91,10 @@ targets:
         # picker (<input type=file>) has somewhere local to browse.
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true
+        CFBundleURLTypes:
+          - CFBundleURLName: Dillo Automation URL
+            CFBundleURLSchemes:
+              - dillo
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: org.dillo.ios

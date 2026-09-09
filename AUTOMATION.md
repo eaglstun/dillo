@@ -32,6 +32,23 @@ PATH="$(brew --prefix fltk@1.3)/bin:$PATH" make -j$(sysctl -n hw.ncpu)
 # -> build/src/dillo  and  build/src/dilloc
 ```
 
+### Apple Shortcuts and automation URLs
+
+The macOS app bundle and iOS app both register the `dillo:` automation
+scheme. Put a URL after the scheme to open it in Dillo:
+
+```sh
+open 'dillo:https://example.com/path'
+```
+
+In Apple Shortcuts, concatenate `dillo:` with a URL variable and pass the
+result to the system **Open URLs** action. This works on macOS and iOS and
+does not require Dillo to be running first. The longer, percent-encoded form
+`dillo://open?url=https%3A%2F%2Fexample.com` is also accepted.
+
+On iOS, Dillo additionally contributes an **Open URL in Dillo** action
+directly to Shortcuts and Siri.
+
 ### Connecting
 
 Each running Dillo listens on `~/.dillo/ctl/<pid>`. `dilloc` uses the first
@@ -240,13 +257,15 @@ lines) installed through a `ResourceFactory` on `ApplePlatform` — the iOS
 counterpart to desktop `fltkui.cc`. `PageLoader.load(_:method:body:
 bodyContentType:completion:)` does GET and POST through `URLSession`.
 
-### This is an interaction surface, not an automation one
+### URL automation exists; page automation does not
 
-Everything a user does arrives through `UIGestureRecognizer` callbacks and
-`private func`s on `BrowserViewController`. There is **no** control channel, no
-scripting entry point, no "fill the field named `q`", and no text extraction —
-`tapAtX:y:` takes canvas pixel coordinates and hit-tests, which means you would
-have to already know where the link is.
+iOS 16 and later exposes **Open URL in Dillo** through App Intents, and the
+cross-platform `dillo:` scheme described in §1 can launch or address the app.
+Once a page is open, however, user interaction still arrives through
+`UIGestureRecognizer` callbacks and `private func`s on
+`BrowserViewController`. There is **no** control channel, no "fill the field
+named `q`", and no text extraction — `tapAtX:y:` takes canvas pixel coordinates
+and hit-tests, which means you would have to already know where the link is.
 
 The primitives to build automation on are all present (`loadHTML:url:`,
 `tapAtX:y:`, `findText:`, `onOpenURL`, POST in `PageLoader`), but nothing wires

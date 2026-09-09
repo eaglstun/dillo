@@ -74,6 +74,16 @@ final class BrowserViewController: UIViewController {
     private var historyIndex = -1
 
     private let homePage = "https://dillo-browser.github.io/"
+    private let initialURL: URL?
+
+    init(initialURL: URL? = nil) {
+        self.initialURL = initialURL
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("not used")
+    }
 
     // MARK: - UI construction
 
@@ -126,7 +136,8 @@ final class BrowserViewController: UIViewController {
         }
         bridge.setFormHost(scrollView)
 
-        load(HistoryEntry(url: homePage), recordHistory: true)
+        load(HistoryEntry(url: initialURL?.absoluteString ?? homePage),
+             recordHistory: true)
 
         NotificationCenter.default.addObserver(
             self, selector: #selector(keyboardChanged(_:)),
@@ -257,7 +268,7 @@ final class BrowserViewController: UIViewController {
                        for: .touchUpInside)
         let next = UIButton(type: .system)
         next.setImage(UIImage(systemName: "chevron.down"), for: .normal)
-        next.addTarget(self, action: #selector(findNext),
+        next.addTarget(self, action: #selector(findNextMatch),
                        for: .touchUpInside)
         let done = UIButton(type: .system)
         done.setTitle("Done", for: .normal)
@@ -297,7 +308,7 @@ final class BrowserViewController: UIViewController {
         }
     }
 
-    @objc private func findNext() { find(backwards: false) }
+    @objc private func findNextMatch() { find(backwards: false) }
     @objc private func findPrev() { find(backwards: true) }
 
     // MARK: - Gestures
@@ -432,6 +443,11 @@ final class BrowserViewController: UIViewController {
 
     private func navigate(to url: String) {
         load(HistoryEntry(url: url), recordHistory: true)
+    }
+
+    func openAutomationURL(_ url: URL) {
+        loadViewIfNeeded()
+        navigate(to: url.absoluteString)
     }
 
     private func load(_ entry: HistoryEntry, recordHistory: Bool) {

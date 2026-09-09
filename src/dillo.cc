@@ -68,6 +68,7 @@
 #ifdef __APPLE__
 #  include <dirent.h>
 #  include <CoreText/CoreText.h>
+#  include "macosautomation.hh"
 #endif
 
 #include "dw/fltkcore.hh"
@@ -631,6 +632,7 @@ int main(int argc, char **argv)
 
 #ifdef __APPLE__
    registerBundledFonts();
+   a_Mac_automation_init();
 #endif
    checkPreferredFonts();
 
@@ -654,6 +656,10 @@ int main(int argc, char **argv)
    /* On macOS this puts the File menu in the menu bar at the top of the
     * screen; elsewhere it does nothing. */
    a_Menu_sysmenubar_init();
+
+#ifdef __APPLE__
+   a_Mac_automation_ready();
+#endif
 
    /* Proxy authentication */
    if (prefs.http_proxyuser && !a_Http_proxy_auth()) {

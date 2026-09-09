@@ -10,6 +10,18 @@ the engine's own scaling. Milestone 5: **interactive forms** — native
 UIKit controls driven by the engine's layout, GET and POST submission
 through dillo's own `form.cc`.
 
+## Platform automation — Shortcuts and URL launches
+
+The iOS app now targets iOS 16 and contributes an **Open URL in Dillo** App
+Intent to Shortcuts and Siri. Both the iOS and macOS app bundles also register
+the same `dillo:` URL scheme, accepting either
+`dillo:https://example.com/path` or the percent-encoded
+`dillo://open?url=...` form. Cold launches retain the requested destination
+until the browser is ready; running apps navigate their active browser.
+
+Verified on September 8, 2026 with an iOS 16 simulator-targeted build and a
+live macOS URL event into the built app bundle.
+
 ## Milestone 7 — basic pinch zoom
 
 Two-finger pinch now changes Dillo's real document zoom from 50–300% in

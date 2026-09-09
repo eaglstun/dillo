@@ -158,6 +158,8 @@ dillo_SOURCES = \
 
 if MACOS_APP
 dillo_SOURCES += \
+	macosautomation.hh \
+	macosautomation.mm \
 	macosfiledialog.hh \
 	macosfiledialog.mm \
 	macoscontextmenu.hh \

@@ -15,6 +15,14 @@
 	<key>CFBundleVersion</key>		<string>@VERSION@</string>
 	<key>CFBundleHelpBookFolder</key>	<string>Dillo.help</string>
 	<key>CFBundleHelpBookName</key>		<string>Dillo Help</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>	<string>Dillo Automation URL</string>
+			<key>CFBundleURLSchemes</key>
+			<array><string>dillo</string></array>
+		</dict>
+	</array>
 	<key>NSHighResolutionCapable</key>	<true/>
 </dict>
 </plist>
