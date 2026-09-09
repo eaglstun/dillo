@@ -132,14 +132,9 @@ verify UI changes on macOS without fooling yourself.
 
 ## Upstream
 
-This fork tracks [dillo-browser/dillo](https://github.com/dillo-browser/dillo).
-Screenshot of the [Dillo Website][dillo] rendered in Dillo:
-
-[dillo]: https://dillo-browser.org/
-
-![Screenshot of Dillo website rendered in Dillo](doc/dillo.png)
-
-You can clone the upstream version of Dillo directly from their git server:
+This fork tracks upstream Dillo, whose canonical repository is the project's
+own git server — the GitHub repo was [retired in 2026][migration] and is no
+longer updated:
 
 - <https://git.dillo-browser.org/dillo>
 
@@ -148,8 +143,15 @@ Mirrors, kept updated in case that git server fails:
 - <https://codeberg.org/dillo/dillo>
 - <https://git.sr.ht/~dillo/dillo>
 
-The upstream commits are signed with the same OpenPGP key used for the
-releases.
+[migration]: https://dillo-browser.org/news/migration-from-github/
+
+Upstream commits are signed with the same OpenPGP key used for the releases.
+
+Screenshot of the [Dillo Website][dillo] rendered in Dillo:
+
+[dillo]: https://dillo-browser.org/
+
+![Screenshot of Dillo website rendered in Dillo](doc/dillo.png)
 
 See also other related forks: [dillo-plus][dillo-plus],
 [dilloNG][dilloNG], [D+ browser][dplus-browser] and [Mobilized
