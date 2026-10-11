@@ -482,6 +482,7 @@ void Html_tag_open_input(DilloHtml *html, const char *tag, int tagsize)
       DilloHtmlInput *input = Html_get_radio_input(html, name);
       if (input && input->getResource())
          rb_r = (RadioButtonResource*) input->getResource();
+      /* rb_r may be NULL if it is the first element in the group */
       resource = factory->createRadioButtonResource(rb_r, false);
       init_val = (a_Html_get_attr(html, tag, tagsize, "checked") != NULL);
       init_str = value;
@@ -564,8 +565,10 @@ void Html_tag_open_input(DilloHtml *html, const char *tag, int tagsize)
 
    if (inp_type != DILLO_HTML_INPUT_UNKNOWN) {
 
-      if (!embed)
+      if (!embed) {
+         assert(resource);
          embed = new Embed(resource);
+      }
 
       assert(embed);
 
