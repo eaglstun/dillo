@@ -52,6 +52,10 @@ static const char *const Css_background_attachment_enum_vals[] = {
    "scroll", "fixed", NULL
 };
 
+static const char *const Css_background_color_enum_vals[] = {
+   "transparent", NULL
+};
+
 static const char *const Css_background_repeat_enum_vals[] = {
    "repeat", "repeat-x", "repeat-y", "no-repeat", NULL
 };
@@ -139,7 +143,7 @@ static const char *const Css_position_enum_vals[] = {
 };
 
 static const char *const Css_text_align_enum_vals[] = {
-   "left", "right", "center", "justify", "string", NULL
+   "left", "right", "center", "justify", "string", "start", "end", NULL
 };
 
 static const char *const Css_text_decoration_enum_vals[] = {
@@ -166,7 +170,8 @@ static const char *const Css_word_spacing_enum_vals[] = {
 const CssPropertyInfo Css_property_info[CSS_PROPERTY_LAST] = {
    {"background-attachment", {CSS_TYPE_ENUM, CSS_TYPE_UNUSED},
     Css_background_attachment_enum_vals},
-   {"background-color", {CSS_TYPE_COLOR, CSS_TYPE_UNUSED}, NULL},
+   {"background-color", {CSS_TYPE_ENUM, CSS_TYPE_COLOR, CSS_TYPE_UNUSED},
+    Css_background_color_enum_vals},
    {"background-image", {CSS_TYPE_URI, CSS_TYPE_UNUSED}, NULL},
    {"background-position", {CSS_TYPE_BACKGROUND_POSITION, CSS_TYPE_UNUSED},
     NULL},

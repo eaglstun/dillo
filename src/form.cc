@@ -116,7 +116,8 @@ public:
    ~DilloHtmlForm ();
    DilloHtmlInput *getInput (Resource *resource);
    DilloHtmlInput *getRadioInput (const char *name);
-   void submit(DilloHtmlInput *active_input, EventButton *event);
+   /* Returns 0 on success, 3 if refused/cancelled, 4 if no URL was built */
+   int submit(DilloHtmlInput *active_input, EventButton *event);
    void reset ();
    void display_hiddens(bool display);
    void addInput(DilloHtmlInput *input, DilloHtmlInputType type);
@@ -230,6 +231,8 @@ public:
    void addOptsTo (SelectionResource *res);
    void reset (SelectionResource *res);
    void appendValuesTo (Dlist *values, SelectionResource *res);
+   int selectValue (SelectionResource *res, const char *value);
+   void describeValue (Dstr *out, SelectionResource *res);
 };
 
 /*
@@ -268,6 +271,280 @@ void a_Html_form_reset2(void *vform)
 void a_Html_form_display_hiddens2(void *vform, bool display)
 {
    ((DilloHtmlForm *)vform)->display_hiddens(display);
+}
+
+/*
+ * Control-socket introspection and automation (contract in html.hh)
+ */
+
+static const char *Form_type_name(DilloHtmlInputType type)
+{
+   switch (type) {
+   case DILLO_HTML_INPUT_TEXT:          return "text";
+   case DILLO_HTML_INPUT_PASSWORD:      return "password";
+   case DILLO_HTML_INPUT_CHECKBOX:      return "checkbox";
+   case DILLO_HTML_INPUT_RADIO:         return "radio";
+   case DILLO_HTML_INPUT_IMAGE:         return "image";
+   case DILLO_HTML_INPUT_FILE:          return "file";
+   case DILLO_HTML_INPUT_BUTTON:        return "button";
+   case DILLO_HTML_INPUT_HIDDEN:        return "hidden";
+   case DILLO_HTML_INPUT_SUBMIT:        return "submit";
+   case DILLO_HTML_INPUT_RESET:         return "reset";
+   case DILLO_HTML_INPUT_BUTTON_SUBMIT: return "button-submit";
+   case DILLO_HTML_INPUT_BUTTON_RESET:  return "button-reset";
+   case DILLO_HTML_INPUT_SELECT:        return "select";
+   case DILLO_HTML_INPUT_SEL_LIST:      return "select-list";
+   case DILLO_HTML_INPUT_TEXTAREA:      return "textarea";
+   case DILLO_HTML_INPUT_INDEX:         return "index";
+   default:                             return "unknown";
+   }
+}
+
+/**
+ * Append str to out with backslash, tab and newline escaped, so that one
+ * input always occupies exactly one line of the reply.
+ */
+static void Form_append_escaped(Dstr *out, const char *str)
+{
+   if (!str)
+      return;
+   for (const char *p = str; *p; p++) {
+      switch (*p) {
+      case '\\': dStr_append(out, "\\\\"); break;
+      case '\t': dStr_append(out, "\\t"); break;
+      case '\n': dStr_append(out, "\\n"); break;
+      case '\r': dStr_append(out, "\\r"); break;
+      default:   dStr_append_c(out, *p); break;
+      }
+   }
+}
+
+/**
+ * Append the current value of an input, unescaped, to out.
+ */
+static void Form_describe_value(DilloHtmlInput *input, Dstr *out)
+{
+   Resource *res = input->getResource();
+
+   switch (input->type) {
+   case DILLO_HTML_INPUT_TEXT:
+   case DILLO_HTML_INPUT_PASSWORD:
+   case DILLO_HTML_INPUT_INDEX:
+   case DILLO_HTML_INPUT_HIDDEN:
+   case DILLO_HTML_INPUT_TEXTAREA:
+      if (res)
+         dStr_append(out, ((TextResource*)res)->getText());
+      else
+         dStr_append(out, input->init_str ? input->init_str : "");
+      break;
+   case DILLO_HTML_INPUT_CHECKBOX:
+   case DILLO_HTML_INPUT_RADIO:
+      {
+         bool on = res ? ((ToggleButtonResource*)res)->isActivated()
+                       : input->init_val;
+         dStr_append(out, on ? "on:" : "off:");
+         dStr_append(out, input->init_str ? input->init_str : "");
+      }
+      break;
+   case DILLO_HTML_INPUT_SELECT:
+   case DILLO_HTML_INPUT_SEL_LIST:
+      if (res && input->select)
+         input->select->describeValue(out, (SelectionResource*)res);
+      break;
+   case DILLO_HTML_INPUT_FILE:
+      if (res)
+         dStr_append(out, ((LabelButtonResource*)res)->getLabel());
+      break;
+   default:
+      /* buttons: init_str is the button's value */
+      dStr_append(out, input->init_str ? input->init_str : "");
+      break;
+   }
+}
+
+static DilloHtmlForm *Form_get(void *v_html, int n)
+{
+   DilloHtml *html = (DilloHtml*)v_html;
+
+   if (n < 0 || n >= html->forms->size())
+      return NULL;
+   return html->forms->get(n);
+}
+
+void a_Html_forms_describe(void *v_html, Dstr *out)
+{
+   DilloHtml *html = (DilloHtml*)v_html;
+
+   for (int i = 0; i < html->forms->size(); i++) {
+      DilloHtmlForm *form = html->forms->get(i);
+      const char *method =
+         form->method == DILLO_HTML_METHOD_GET ? "GET" :
+         form->method == DILLO_HTML_METHOD_POST ? "POST" : "UNKNOWN";
+      const char *enc =
+         form->content_type == DILLO_HTML_ENC_MULTIPART ?
+         "multipart/form-data" : "application/x-www-form-urlencoded";
+      dStr_sprintfa(out, "%d\t%s\t%s\t%s\n", i, method,
+                    URL_STR(form->action), enc);
+   }
+}
+
+int a_Html_inputs_describe(void *v_html, int n, Dstr *out)
+{
+   DilloHtmlForm *form = Form_get(v_html, n);
+
+   if (!form)
+      return 1;
+
+   for (int i = 0; i < form->inputs->size(); i++) {
+      DilloHtmlInput *input = form->inputs->get(i);
+      Dstr *value = dStr_new("");
+
+      Form_describe_value(input, value);
+      dStr_sprintfa(out, "%d\t%s\t", i, Form_type_name(input->type));
+      Form_append_escaped(out, input->name ? input->name : "");
+      dStr_append_c(out, '\t');
+      Form_append_escaped(out, value->str);
+      dStr_append_c(out, '\n');
+      dStr_free(value, 1);
+   }
+   return 0;
+}
+
+/**
+ * Parse a boolean for checkbox values. Returns 1/0, or -1 if unrecognised.
+ */
+static int Form_parse_bool(const char *value)
+{
+   static const char *yes[] = { "1", "on", "true", "yes", "checked", NULL };
+   static const char *no[] = { "0", "off", "false", "no", "unchecked", "",
+                               NULL };
+
+   for (int i = 0; yes[i]; i++)
+      if (!dStrAsciiCasecmp(value, yes[i]))
+         return 1;
+   for (int i = 0; no[i]; i++)
+      if (!dStrAsciiCasecmp(value, no[i]))
+         return 0;
+   return -1;
+}
+
+int a_Html_input_set(void *v_html, int n, const char *name, const char *value)
+{
+   DilloHtmlForm *form = Form_get(v_html, n);
+   DilloHtmlInput *input = NULL;
+
+   if (!form)
+      return 1;
+   if (!name || !value)
+      return 2;
+
+   for (int i = 0; i < form->inputs->size() && !input; i++) {
+      DilloHtmlInput *in = form->inputs->get(i);
+      if (in->name && strcmp(in->name, name) == 0)
+         input = in;
+   }
+   if (!input)
+      return 2;
+
+   Resource *res = input->getResource();
+
+   switch (input->type) {
+   case DILLO_HTML_INPUT_TEXT:
+   case DILLO_HTML_INPUT_PASSWORD:
+   case DILLO_HTML_INPUT_INDEX:
+   case DILLO_HTML_INPUT_HIDDEN:
+   case DILLO_HTML_INPUT_TEXTAREA:
+      /* Hidden inputs have an (undisplayed) entry widget too */
+      if (!res)
+         return 3;
+      ((TextResource*)res)->setText(value);
+      return 0;
+   case DILLO_HTML_INPUT_CHECKBOX:
+      {
+         int on = Form_parse_bool(value);
+         if (on < 0)
+            return 4;
+         if (!res)
+            return 3;
+         ((ToggleButtonResource*)res)->setActivated(on != 0);
+         return 0;
+      }
+   case DILLO_HTML_INPUT_RADIO:
+      {
+         /* Activate the member of the group whose value matches, and clear
+          * the others: FLTK's Fl_Button::value() does not do that for us */
+         DilloHtmlInput *match = NULL;
+         for (int i = 0; i < form->inputs->size(); i++) {
+            DilloHtmlInput *in = form->inputs->get(i);
+            if (in->type == DILLO_HTML_INPUT_RADIO && in->name &&
+                strcmp(in->name, name) == 0 && in->init_str &&
+                strcmp(in->init_str, value) == 0 && in->getResource()) {
+               match = in;
+               break;
+            }
+         }
+         if (!match)
+            return 4;
+         for (int i = 0; i < form->inputs->size(); i++) {
+            DilloHtmlInput *in = form->inputs->get(i);
+            if (in->type == DILLO_HTML_INPUT_RADIO && in->name &&
+                strcmp(in->name, name) == 0 && in->getResource()) {
+               ToggleButtonResource *tb =
+                  (ToggleButtonResource*)in->getResource();
+               tb->setActivated(in == match);
+            }
+         }
+         return 0;
+      }
+   case DILLO_HTML_INPUT_SELECT:
+   case DILLO_HTML_INPUT_SEL_LIST:
+      if (!res || !input->select)
+         return 3;
+      if (input->select->selectValue((SelectionResource*)res, value) < 0)
+         return 4;
+      return 0;
+   case DILLO_HTML_INPUT_FILE:
+      /* Reading a file needs the picker dialog; not supported remotely */
+      return 3;
+   default:
+      return 3;
+   }
+}
+
+int a_Html_form_submit_named(void *v_html, int n, const char *button)
+{
+   DilloHtmlForm *form = Form_get(v_html, n);
+   DilloHtmlInput *active = NULL;
+
+   if (!form)
+      return 1;
+
+   if (button && *button) {
+      for (int i = 0; i < form->inputs->size(); i++) {
+         DilloHtmlInput *in = form->inputs->get(i);
+         if ((in->type == DILLO_HTML_INPUT_SUBMIT ||
+              in->type == DILLO_HTML_INPUT_BUTTON_SUBMIT ||
+              in->type == DILLO_HTML_INPUT_IMAGE) &&
+             in->name && strcmp(in->name, button) == 0) {
+            active = in;
+            break;
+         }
+      }
+      if (!active)
+         return 2;
+   }
+
+   return form->submit(active, NULL);
+}
+
+int a_Html_form_reset_n(void *v_html, int n)
+{
+   DilloHtmlForm *form = Form_get(v_html, n);
+
+   if (!form)
+      return 1;
+   form->reset();
+   return 0;
 }
 
 /*
@@ -1087,20 +1364,23 @@ void DilloHtmlForm::eventHandler(Resource *resource, EventButton *event)
  * Submit.
  * (Called by eventHandler())
  */
-void DilloHtmlForm::submit(DilloHtmlInput *active_input, EventButton *event)
+int DilloHtmlForm::submit(DilloHtmlInput *active_input, EventButton *event)
 {
    if (!dStrAsciiCasecmp(URL_SCHEME(html->page_url), "https") &&
        dStrAsciiCasecmp(URL_SCHEME(action), "https")) {
+      /* Under prefs.noninteractive this dialog answers 0 (cancel) at once */
       int choice = a_Dialog_choice("Dillo: Insecure form submission",
                                    "A form on a SECURE page wants to use an "
                                    "INSECURE protocol to submit data.",
                                    "Continue", "Cancel", NULL);
       if (choice != 1)
-         return;
+         return 3;
    }
 
    DilloUrl *url = buildQueryUrl(active_input);
-   if (url) {
+   if (!url)
+      return 4;
+   {
       if (event && event->button == 2) {
          if (prefs.middle_click_opens_new_tab) {
             int focus = prefs.focus_new_tab ? 1 : 0;
@@ -1114,6 +1394,7 @@ void DilloHtmlForm::submit(DilloHtmlInput *active_input, EventButton *event)
       }
       a_Url_free(url);
    }
+   return 0;
 }
 
 /**
@@ -2036,6 +2317,50 @@ void DilloHtmlSelect::appendValuesTo (Dlist *values, SelectionResource *res)
 
          if (val)
             dList_append(values, dStr_new(val));
+      }
+   }
+}
+
+/**
+ * Select the option whose value is exactly "value" and deselect every
+ * other option. Option indices in the widget match indices in opts (see
+ * reset() and appendValuesTo()). Returns the selected index, or -1 if no
+ * option has that value (in which case nothing is changed).
+ */
+int DilloHtmlSelect::selectValue (SelectionResource *res, const char *value)
+{
+   int size = opts->size ();
+   int found = -1;
+
+   for (int i = 0; i < size && found < 0; i++) {
+      const char *val = opts->get (i)->getValue();
+      if (val && strcmp(val, value) == 0)
+         found = i;
+   }
+   if (found < 0)
+      return -1;
+
+   for (int i = 0; i < size; i++)
+      res->setItem(i, i == found);
+   return found;
+}
+
+/**
+ * Append the values of the currently selected options, comma-separated.
+ */
+void DilloHtmlSelect::describeValue (Dstr *out, SelectionResource *res)
+{
+   int size = opts->size ();
+   int n = 0;
+
+   for (int i = 0; i < size; i++) {
+      if (res->isSelected (i)) {
+         const char *val = opts->get (i)->getValue();
+         if (val) {
+            if (n++)
+               dStr_append_c(out, ',');
+            dStr_append(out, val);
+         }
       }
    }
 }

@@ -12,6 +12,7 @@ LDADD = \
 TESTS = \
 	containers \
 	disposition \
+	history \
 	identity \
 	liang \
 	notsosimplevector \
@@ -34,6 +35,12 @@ containers_LDADD = \
 disposition_SOURCES = \
 	disposition.c
 disposition_LDADD = \
+	$(top_builddir)/dlib/libDlib.a
+history_SOURCES = \
+	history_test.c \
+	$(top_srcdir)/src/history.c \
+	$(top_srcdir)/src/url.c
+history_LDADD = \
 	$(top_builddir)/dlib/libDlib.a
 notsosimplevector_SOURCES = notsosimplevector.cc
 identity_SOURCES = identity.cc

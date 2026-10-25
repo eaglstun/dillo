@@ -160,6 +160,11 @@ fi
 
 AC_PROG_CC
 AC_PROG_CXX
+dnl Automake sees the conditional .mm sources in src/Makefile.am on every host
+dnl and therefore always emits its Objective-C++ dependency conditional. Run
+dnl the probe everywhere so that conditional is initialized; the compiler is
+dnl only used when MACOS_APP actually adds the .mm sources on Darwin.
+AC_PROG_OBJCXX
 AC_PROG_RANLIB
 AC_PROG_CPP
 
@@ -920,6 +925,17 @@ if test "x$git_found" = "xyes" ; then
     AC_MSG_RESULT([no])
   fi
 fi
+dnl ----------------------------------------------
+dnl Bundled fonts: macOS ships no DejaVu, which is
+dnl what dillo asks for by default.
+dnl ----------------------------------------------
+case "$target_os" in
+  darwin*) bundled_fonts_ok="yes" ;;
+  *)       bundled_fonts_ok="no"  ;;
+esac
+AM_CONDITIONAL([BUNDLE_FONTS],  [test "x$bundled_fonts_ok" = "xyes"])
+AM_CONDITIONAL([MACOS_APP],     [test "x$bundled_fonts_ok" = "xyes"])
+
 AM_CONDITIONAL([GIT_AVAILABLE],  [test "x$git_ok" = "xyes"])
 
 AC_SUBST(BASE_CUR_WORKING_DIR)
@@ -956,6 +972,8 @@ AC_CONFIG_FILES([
     lout/Makefile
     src/Makefile
     src/IO/Makefile
+    mac/Makefile
+    mac/Info.plist
     test/Makefile
     test/unit/Makefile
     test/dw/Makefile

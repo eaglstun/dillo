@@ -298,6 +298,11 @@ typedef enum {
    CSS_WORD_SPACING_NORMAL
 } CssWordSpacingExtensions;
 
+typedef enum {
+   CSS_TEXT_ALIGN_START = dw::core::style::TEXT_ALIGN_STRING + 1,
+   CSS_TEXT_ALIGN_END
+} CssTextAlignExtensions;
+
 
 /**
  * \brief This class holds a CSS property and value pair.

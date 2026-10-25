@@ -314,6 +314,12 @@ search_url="mj Mojeek https://www.mojeek.com/search?q=%s"
 # to allow better contrast with text/links/background
 #contrast_visited_color=YES
 
+# Save successfully opened pages in ~/.dillo/history.txt. Set the maximum to
+# zero to keep only session history. Only http: and https: pages are recorded;
+# internal pages and local file paths stay out of the history file.
+#save_history=YES
+#history_max_entries=1000
+
 
 #-------------------------------------------------------------------------
 #                        USER INTERFACE SECTION
@@ -416,10 +422,13 @@ ui_tab_bg_color=#b7beb7
 #show_stop=YES
 #show_bookmarks=YES
 #show_tools=YES
+# On macOS the File menu is always in the system menu bar, and this has no
+# effect.
 #show_filemenu=YES
 #show_clear_url=YES
 #show_url=YES
 #show_search=YES
+# On macOS Help is a menu in the system menu bar, and this has no effect.
 #show_help=YES
 #show_progress_box=YES
 
@@ -461,6 +470,12 @@ ui_tab_bg_color=#b7beb7
 
 # Ask before quitting Dillo with more than one window or tab open.
 #show_quit_dialog=NO
+
+# Never block on a modal dialog: answer every prompt with its safe default
+# (cancel, refuse, no file) and log it instead. Meant for driving Dillo from
+# a script over the control socket (see "dilloc help"); can also be toggled
+# at run time with "dilloc noninteractive 1".
+#noninteractive=NO
 
 #-------------------------------------------------------------------------
 #                        DEBUG MESSAGES SECTION

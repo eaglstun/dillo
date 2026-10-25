@@ -63,6 +63,8 @@ typedef struct {
    int32_t ui_tab_height;
    int32_t ui_text_bg_color;
    bool_t contrast_visited_color;
+   bool_t save_history;
+   int32_t history_max_entries;
    bool_t show_tooltip;
    bool_t show_ui_tooltip;
    char *theme;
@@ -123,6 +125,9 @@ typedef struct {
    bool_t show_extra_warnings;
    bool_t trace_http;
    bool_t middle_click_drags_page;
+   /* Answer every modal dialog with its safe default instead of blocking;
+    * for scripted use over the control socket */
+   bool_t noninteractive;
    int penalty_hyphen, penalty_hyphen_2;
    int penalty_em_dash_left, penalty_em_dash_right, penalty_em_dash_right_2;
    int stretchability_factor;

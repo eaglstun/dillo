@@ -526,7 +526,9 @@ void StyleEngine::apply (int i, StyleAttrs *attrs, CssPropertyList *props,
                (BackgroundAttachment) p->value.intVal;
             break;
          case CSS_PROPERTY_BACKGROUND_COLOR:
-            if (prefs.allow_white_bg || p->value.intVal != 0xffffff)
+            if (p->type == CSS_TYPE_ENUM)
+               attrs->backgroundColor = NULL;
+            else if (prefs.allow_white_bg || p->value.intVal != 0xffffff)
                attrs->backgroundColor = Color::create(layout, p->value.intVal);
             else
                attrs->backgroundColor =
@@ -676,7 +678,12 @@ void StyleEngine::apply (int i, StyleAttrs *attrs, CssPropertyList *props,
             computeLength (&attrs->right, p->value.lenVal, attrs->font);
             break;
          case CSS_PROPERTY_TEXT_ALIGN:
-            attrs->textAlign = (TextAlignType) p->value.intVal;
+            if (p->value.intVal == CSS_TEXT_ALIGN_START)
+               attrs->textAlign = TEXT_ALIGN_LEFT;
+            else if (p->value.intVal == CSS_TEXT_ALIGN_END)
+               attrs->textAlign = TEXT_ALIGN_RIGHT;
+            else
+               attrs->textAlign = (TextAlignType) p->value.intVal;
             break;
          case CSS_PROPERTY_TEXT_DECORATION:
             attrs->textDecoration |= p->value.intVal;

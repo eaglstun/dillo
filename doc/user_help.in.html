@@ -306,7 +306,7 @@ bar to navigate among history pages.
 <h3 id="history">History</h3>
 <p>
 When you follow several links across different web pages, they are remembered in
-case you can to go back. Use the "Back" and "Forward" buttons of the panel to go
+case you want to go back. Use the "Back" and "Forward" buttons of the panel to go
 to the previous or next page. Click with the left button to open the page in the
 same tab or use the middle button to open it in a new tab.
 <p>
@@ -319,6 +319,18 @@ The <code>,</code> (comma) and <code>.</code> (dot) keys can be used to jump
 backwards or forward (mnemonic: those keys are usually labeled "&lt;" and
 "&gt;"). You can also use the back and forward buttons on your mouse if they are
 available.
+
+<p>Dillo also saves successfully opened HTTP and HTTPS pages across sessions.
+Choose <b>File &rarr; History</b> (Command-Y on macOS), or open
+<a href="about:history">about:history</a>, to see the newest visits first. Use
+<b>File &rarr; Clear History</b> to erase the saved list without disturbing the
+Back and Forward buttons in tabs that are already open.</p>
+
+<p>The history is stored in <code>~/.dillo/history.txt</code>. Set
+<code>save_history=NO</code> to keep history only until Dillo exits, or change
+<code>history_max_entries</code> from its default of 1000. A maximum of zero
+also keeps only the current session. Local file paths and internal Dillo pages
+are never written to the history file.</p>
 
 <h3 id="location-bar">Location bar</h3>
 <p>
@@ -834,6 +846,43 @@ standard output. Some commands can also read data from the standard input and
 write it to dillo. Use <code>dilloc help</code> to see which commands are
 available and their syntax.
 
+<p>
+Besides navigation (<code>open</code>, <code>wait</code>, <code>url</code>,
+<code>title</code>, <code>dump</code>, <code>load</code>, ...) dilloc can
+inspect and operate the forms and links of the current page:
+<ul>
+<li><code>links</code>, <code>forms</code>, <code>inputs N</code> list the
+links, the forms and the inputs of form N, one per line, with TAB separated
+fields (index, type, name, current value). Indices are 0-based.</li>
+<li><code>set N NAME VALUE</code> sets input NAME of form N. Text fields take
+the rest of the line (spaces are fine, newlines cannot be sent), checkboxes
+take <code>on</code>/<code>off</code>, radios and selects take an option value.
+File inputs cannot be set remotely.</li>
+<li><code>submit N [NAME]</code> submits form N as if the submit button NAME
+had been clicked; <code>reset N</code> resets it; <code>follow N</code> opens
+link N. These start a page load and return immediately, so run
+<code>dilloc wait</code> after them.</li>
+<li><code>resolve HREF</code> prints HREF resolved against the current URL.</li>
+<li><code>noninteractive 1</code> makes dillo answer every modal dialog (insecure
+form submission, file chooser, TLS warnings, ...) with its cancel/refuse
+default instead of blocking, so a script never hangs waiting for a click.
+The same can be set permanently with <code>noninteractive=YES</code> in
+dillorc. Refusals are reported as a non-zero exit status and logged.</li>
+</ul>
+
+<p>
+For example, to search a site from a script:
+<pre>
+dilloc noninteractive 1
+dilloc open https://example.org/ &amp;&amp; dilloc wait
+dilloc forms                    # 0  GET  https://example.org/search  ...
+dilloc inputs 0                 # 0  text  q  ...
+dilloc set 0 q dillo browser
+dilloc submit 0 &amp;&amp; dilloc wait
+dilloc url                      # https://example.org/search?q=dillo+browser
+dilloc dump &gt; results.html
+</pre>
+
 <h3 id="custom-actions">Custom actions</h3>
 <p>
 Users can define custom actions that execute arbitrary programs directly from
@@ -919,4 +968,3 @@ If you find any issue, please report it via
 </div>
 </body>
 </html>
-

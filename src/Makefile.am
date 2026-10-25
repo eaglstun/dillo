@@ -2,11 +2,19 @@ AM_CPPFLAGS= \
 	-I$(top_srcdir) \
 	-DDILLO_SYSCONF='"$(sysconfdir)/"' \
 	-DDILLO_DOCDIR='"$(docdir)/"' \
+	-DDILLO_BUILD_DOCDIR='"@BASE_CUR_WORKING_DIR@/doc/"' \
+	-DDILLO_FONTSDIR='"$(datadir)/dillo/fonts/"' \
+	-DDILLO_SRC_FONTSDIR='"$(abs_top_srcdir)/fonts/"' \
 	-DCUR_WORKING_DIR='"@BASE_CUR_WORKING_DIR@/src"' \
 	@LIBJPEG_CPPFLAGS@
 
 AM_CFLAGS = @LIBPNG_CFLAGS@
 AM_CXXFLAGS = @LIBPNG_CFLAGS@ @FLTK_CXXFLAGS@
+if MACOS_APP
+AM_OBJCXXFLAGS = $(AM_CXXFLAGS) -fobjc-arc
+else
+AM_OBJCXXFLAGS =
+endif
 
 SUBDIRS = IO
 
@@ -151,6 +159,22 @@ dillo_SOURCES = \
 	findbar.hh \
 	xembed.cc \
 	xembed.hh
+
+if MACOS_APP
+dillo_SOURCES += \
+	macosautomation.hh \
+	macosautomation.mm \
+	macosfiledialog.hh \
+	macosfiledialog.mm \
+	macossearchdialog.hh \
+	macossearchdialog.mm \
+	macoslocation.hh \
+	macoslocation.mm \
+	macosnative_tabs.hh \
+	macosnative_tabs.mm \
+	macoscontextmenu.hh \
+	macoscontextmenu.mm
+endif
 
 # https://www.gnu.org/software/automake/manual/html_node/Built-Sources-Example.html
 nodist_dillo_SOURCES = commit.h
