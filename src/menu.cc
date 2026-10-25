@@ -17,6 +17,8 @@
 
 #include <FL/Fl.H>
 #include <FL/Fl_Menu_Item.H>
+#include <FL/Fl_Group.H>
+#include <FL/Fl_Sys_Menu_Bar.H>
 
 #include "lout/misc.hh"    /* SimpleVector */
 #include "msg.h"
@@ -28,6 +30,11 @@
 #include "ui.hh" // for (UI *)
 #include "keys.hh"
 #include "timeout.hh"
+
+#ifdef __APPLE__
+#include "macoscontextmenu.hh"
+#include "macosnative_tabs.hh"
+#endif
 
 #include <unistd.h>
 
@@ -77,6 +84,10 @@ static void filemenu_cb(Fl_Widget*, void *data)
       a_UIcmd_open_file(popup_bw);
    } else if (strcmp((char*)data, "ou") == 0) {
       a_UIcmd_focus_location(popup_bw);
+   } else if (strcmp((char*)data, "hi") == 0) {
+      a_UIcmd_history(popup_bw);
+   } else if (strcmp((char*)data, "ch") == 0) {
+      a_UIcmd_clear_history(popup_bw);
    } else if (strcmp((char*)data, "cw") == 0) {
       a_Timeout_add(0.0, a_UIcmd_close_bw, popup_bw);
    } else if (strcmp((char*)data, "ed") == 0) {
@@ -340,7 +351,11 @@ static void Menu_popup_cb(void *data)
 
    ((UI*)popup_bw->ui)->window()->cursor(FL_CURSOR_DEFAULT);
 
+#ifdef __APPLE__
+   picked = a_Mac_context_menu_popup(d->menu);
+#else
    picked = d->menu->popup(popup_x, popup_y, d->title, d->picked);
+#endif
    if (picked) {
       d->picked = picked;
       if (picked->callback())
@@ -714,6 +729,10 @@ void a_Menu_file_popup(BrowserWindow *bw, void *v_wid)
        (void*)"of",0,0,0,0,0},
       {"Open URL...", Keys::getShortcut(KEYS_GOTO), filemenu_cb,
        (void*)"ou",0,0,0,0,0},
+      {"History", Keys::getShortcut(KEYS_HISTORY), filemenu_cb,
+       (void*)"hi",0,0,0,0,0},
+      {"Clear History...", 0, filemenu_cb,
+       (void*)"ch", FL_MENU_DIVIDER,0,0,0,0},
       {"Close", Keys::getShortcut(KEYS_CLOSE_TAB), filemenu_cb,
        (void*)"cw", FL_MENU_DIVIDER,0,0,0,0},
       {"Exit Dillo", Keys::getShortcut(KEYS_CLOSE_ALL), filemenu_cb,
@@ -928,3 +947,142 @@ void a_Menu_tools_popup(BrowserWindow *bw, int x, int y)
    }
 }
 
+
+/*
+ * macOS system menu bar ---------------------------------------------------
+ */
+
+#ifdef __APPLE__
+
+/**
+ * Callback for the system menu bar's File menu.
+ *
+ * FLTK keeps a single system menu bar for the whole application, so unlike
+ * the in-window popups this one cannot capture its browser window when it is
+ * built. Resolve the frontmost window at click time instead, then reuse the
+ * regular File menu callback.
+ */
+static void Menu_sysmenu_file_cb(Fl_Widget *wid, void *data)
+{
+#ifdef __APPLE__
+   if (strcmp((const char *)data, "cw") == 0 &&
+       a_Mac_tabs_close_selected())
+      return;
+#endif
+   BrowserWindow *bw = a_UIcmd_get_active_bw();
+
+   if (bw) {
+      popup_bw = bw;
+      filemenu_cb(wid, data);
+   }
+}
+
+/** Open the native web-search dialog for the frontmost browser window. */
+static void Menu_sysmenu_search_cb(Fl_Widget*, void*)
+{
+   BrowserWindow *bw = a_UIcmd_get_active_bw();
+
+   if (bw)
+      a_UIcmd_search_dialog(bw);
+}
+
+/**
+ * Callback for the Help menu's manual entries.
+ *
+ * 'data' is the anchor to jump to within the user manual, or NULL for the
+ * top of it.
+ */
+static void Menu_sysmenu_help_cb(Fl_Widget*, void *data)
+{
+   BrowserWindow *bw = a_UIcmd_get_active_bw();
+
+   if (bw)
+      a_UIcmd_open_help(bw, (const char*)data);
+}
+
+/**
+ * Callback for the Help menu's entries that point off-site. 'data' is the
+ * URL to open.
+ */
+static void Menu_sysmenu_weburl_cb(Fl_Widget*, void *data)
+{
+   BrowserWindow *bw = a_UIcmd_get_active_bw();
+
+   if (bw)
+      a_UIcmd_open_urlstr(bw, (const char*)data);
+}
+
+/**
+ * Install dillo's menus in the menu bar at the top of the screen.
+ *
+ * Call once, after the display is open. There is no "Quit" item here: on
+ * macOS that belongs in the application menu, which FLTK builds for us.
+ */
+void a_Menu_sysmenubar_init(void)
+{
+   static Fl_Menu_Item pm[] = {
+      {"File", 0, 0, 0, FL_SUBMENU,0,0,0,0},
+         {"New Tab", FL_COMMAND + 't', Menu_sysmenu_file_cb,
+          (void*)"nt",0,0,0,0,0},
+         {"New Window", FL_COMMAND + 'n', Menu_sysmenu_file_cb,
+          (void*)"nw", FL_MENU_DIVIDER,0,0,0,0},
+         {"Open File...", FL_COMMAND + 'o', Menu_sysmenu_file_cb,
+          (void*)"of",0,0,0,0,0},
+         {"Open Location...", FL_COMMAND + 'l', Menu_sysmenu_file_cb,
+          (void*)"ou",0,0,0,0,0},
+         {"Search the Web...", FL_CTRL + 's', Menu_sysmenu_search_cb,
+          0, FL_MENU_DIVIDER,0,0,0,0},
+         {"History", FL_COMMAND + 'y', Menu_sysmenu_file_cb,
+          (void*)"hi",0,0,0,0,0},
+         {"Clear History...", 0, Menu_sysmenu_file_cb,
+          (void*)"ch", FL_MENU_DIVIDER,0,0,0,0},
+         {"Close Tab", FL_COMMAND + 'w', Menu_sysmenu_file_cb,
+          (void*)"cw",0,0,0,0,0},
+         {0,0,0,0,0,0,0,0,0},
+      /* Keep "Help" last: macOS treats the final menu of that name as the
+       * help menu and gives it the search field. The user_data of each
+       * manual entry is its anchor in doc/user_help.in.html. */
+      {"Help", 0, 0, 0, FL_SUBMENU,0,0,0,0},
+         {"Dillo Help", FL_COMMAND + '?', Menu_sysmenu_help_cb,0,0,0,0,0,0},
+         {"Keyboard Shortcuts", 0, Menu_sysmenu_help_cb,
+          (void*)"keyboard-shortcuts",0,0,0,0,0},
+         {"Manual Sections", 0, 0, 0, FL_SUBMENU,0,0,0,0},
+            {"Introduction", 0, Menu_sysmenu_help_cb,
+             (void*)"introduction",0,0,0,0,0},
+            {"Reading", 0, Menu_sysmenu_help_cb,
+             (void*)"reading",0,0,0,0,0},
+            {"Navigation", 0, Menu_sysmenu_help_cb,
+             (void*)"navigation",0,0,0,0,0},
+            {"Privacy and Network", 0, Menu_sysmenu_help_cb,
+             (void*)"privacy-and-network",0,0,0,0,0},
+            {"Configuration", 0, Menu_sysmenu_help_cb,
+             (void*)"configuration",0,0,0,0,0},
+            {"Advanced Usage", 0, Menu_sysmenu_help_cb,
+             (void*)"advanced-usage",0,0,0,0,0},
+            {0,0,0,0,0,0,0,0,0},
+         {"Bug Meter", 0, Menu_sysmenu_help_cb,
+          (void*)"bug-meter", FL_MENU_DIVIDER,0,0,0,0},
+         {"Dillo Website", 0, Menu_sysmenu_weburl_cb,
+          (void*)"https://dillo-browser.org/",0,0,0,0,0},
+         {"Report a Bug", 0, Menu_sysmenu_weburl_cb,
+          (void*)"https://github.com/dillo-browser/dillo/issues",0,0,0,0,0},
+         {0,0,0,0,0,0,0,0,0},
+      {0,0,0,0,0,0,0,0,0}
+   };
+
+   /* Keep the bar out of any window group: it outlives every window, and
+    * being deleted with one would tear the menu out of the screen. */
+   Fl_Group *saved = Fl_Group::current();
+   Fl_Group::current(NULL);
+   Fl_Sys_Menu_Bar *bar = new Fl_Sys_Menu_Bar(0, 0, 1, 1);
+   bar->menu(pm);
+   Fl_Group::current(saved);
+}
+
+#else /* !__APPLE__ */
+
+void a_Menu_sysmenubar_init(void)
+{
+}
+
+#endif /* __APPLE__ */

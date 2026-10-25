@@ -286,6 +286,53 @@ void a_Html_form_display_hiddens(void *v_html, void *v_form, bool_t display)
    }
 }
 
+/*
+ * Control-socket introspection (see html.hh for the contract).
+ */
+
+int a_Html_link_count(void *v_html)
+{
+   DilloHtml *html = (DilloHtml*)v_html;
+
+   return html->links->size();
+}
+
+DilloUrl *a_Html_link_url(void *v_html, int n)
+{
+   DilloHtml *html = (DilloHtml*)v_html;
+
+   if (n < 0 || n >= html->links->size())
+      return NULL;
+   /* Entries can be NULL (Html_set_new_link stores NULL for a NULL url) */
+   return html->links->get(n);
+}
+
+void a_Html_links_describe(void *v_html, Dstr *out)
+{
+   DilloHtml *html = (DilloHtml*)v_html;
+
+   for (int i = 0; i < html->links->size(); i++) {
+      DilloUrl *url = html->links->get(i);
+      dStr_sprintfa(out, "%d\t%s\n", i, url ? URL_STR(url) : "");
+   }
+}
+
+int a_Html_form_count(void *v_html)
+{
+   DilloHtml *html = (DilloHtml*)v_html;
+
+   return html->forms->size();
+}
+
+void *a_Html_get_form(void *v_html, int n)
+{
+   DilloHtml *html = (DilloHtml*)v_html;
+
+   if (n < 0 || n >= html->forms->size())
+      return NULL;
+   return (void*)html->forms->get(n);
+}
+
 /**
  * Set the URL data for image maps.
  */
@@ -1934,7 +1981,8 @@ static void Html_tag_open_frame (DilloHtml *html, const char *tag, int tagsize)
    if (!(url = a_Html_url_new(html, attrbuf, NULL, 0)))
       return;
 
-   if (a_Capi_get_flags_with_redirection(url) & CAPI_IsCached) {
+   if ((a_Capi_get_flags_with_redirection(url) & CAPI_IsCached) ||
+       a_History_is_visited(url)) {
       /* visited frame */
       html->styleEngine->setPseudoVisited ();
    } else {
@@ -2499,7 +2547,8 @@ static void Html_tag_open_object(DilloHtml *html, const char *tag, int tagsize)
                            URL_STR(base_url), (base_url != NULL));
       dReturn_if_fail ( url != NULL );
 
-      if (a_Capi_get_flags_with_redirection(url) & CAPI_IsCached) {
+      if ((a_Capi_get_flags_with_redirection(url) & CAPI_IsCached) ||
+          a_History_is_visited(url)) {
          html->styleEngine->setPseudoVisited ();
       } else {
          html->styleEngine->setPseudoLink ();
@@ -2537,7 +2586,8 @@ static void Html_tag_open_video(DilloHtml *html, const char *tag, int tagsize)
       url = a_Html_url_new(html, attrbuf, NULL, 0);
       dReturn_if_fail ( url != NULL );
 
-      if (a_Capi_get_flags_with_redirection(url) & CAPI_IsCached) {
+      if ((a_Capi_get_flags_with_redirection(url) & CAPI_IsCached) ||
+          a_History_is_visited(url)) {
          html->styleEngine->setPseudoVisited ();
       } else {
          html->styleEngine->setPseudoLink ();
@@ -2569,7 +2619,8 @@ static void Html_tag_open_audio(DilloHtml *html, const char *tag, int tagsize)
       url = a_Html_url_new(html, attrbuf, NULL, 0);
       dReturn_if_fail ( url != NULL );
 
-      if (a_Capi_get_flags_with_redirection(url) & CAPI_IsCached) {
+      if ((a_Capi_get_flags_with_redirection(url) & CAPI_IsCached) ||
+          a_History_is_visited(url)) {
          html->styleEngine->setPseudoVisited ();
       } else {
          html->styleEngine->setPseudoLink ();
@@ -2605,7 +2656,8 @@ static void Html_tag_open_source(DilloHtml *html, const char *tag,
 
       dReturn_if_fail ( url != NULL );
 
-      if (a_Capi_get_flags_with_redirection(url) & CAPI_IsCached) {
+      if ((a_Capi_get_flags_with_redirection(url) & CAPI_IsCached) ||
+          a_History_is_visited(url)) {
          html->styleEngine->setPseudoVisited ();
       } else {
          html->styleEngine->setPseudoLink ();
@@ -2643,7 +2695,8 @@ static void Html_tag_open_embed(DilloHtml *html, const char *tag, int tagsize)
 
       dReturn_if_fail ( url != NULL );
 
-      if (a_Capi_get_flags_with_redirection(url) & CAPI_IsCached) {
+      if ((a_Capi_get_flags_with_redirection(url) & CAPI_IsCached) ||
+          a_History_is_visited(url)) {
          html->styleEngine->setPseudoVisited ();
       } else {
          html->styleEngine->setPseudoLink ();
@@ -2723,7 +2776,8 @@ static void Html_tag_open_a(DilloHtml *html, const char *tag, int tagsize)
       url = a_Html_url_new(html, attrbuf, NULL, 0);
       dReturn_if_fail ( url != NULL );
 
-      if (a_Capi_get_flags_with_redirection(url) & CAPI_IsCached) {
+      if ((a_Capi_get_flags_with_redirection(url) & CAPI_IsCached) ||
+          a_History_is_visited(url)) {
          html->InVisitedLink = true;
          html->styleEngine->setPseudoVisited ();
          if (html->non_css_visited_color != -1)
@@ -4467,5 +4521,3 @@ static int Html_write_raw(DilloHtml *html, char *buf, int bufsize, int Eof)
 
    return token_start;
 }
-
-

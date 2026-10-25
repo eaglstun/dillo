@@ -38,12 +38,34 @@
 #include "prefs.h"
 #include "dlib/dlib.h"
 
+#ifdef __APPLE__
+#  include "macosfiledialog.hh"
+#  include "macossearchdialog.hh"
+#endif
+
 /*
  * Local Data
  */
 static int input_answer;
 static char *input_str = NULL;
 static int choice_answer;
+
+/**
+ * In non-interactive mode (prefs.noninteractive, set from dillorc or with
+ * "dilloc noninteractive 1") no modal dialog may block the event loop,
+ * because the control socket runs on that same loop and a script would hang
+ * forever. Each dialog entry point checks this first and returns its
+ * "cancelled" value; the prompt is logged so the refusal is visible.
+ */
+static bool Dialog_suppressed(const char *kind, const char *title,
+                              const char *msg)
+{
+   if (!prefs.noninteractive)
+      return false;
+   MSG("noninteractive: suppressed %s dialog \"%s\": %s\n", kind,
+       title ? title : "", msg ? msg : "");
+   return true;
+}
 
 
 /*
@@ -153,6 +175,8 @@ void a_Dialog_msg(const char *title, const char *msg)
 {
    if (!(title && *title))
       title = "Dillo: Message";
+   if (Dialog_suppressed("message", title, msg))
+      return;
    fl_message_title(title);
    fl_message("%s", msg);
 }
@@ -178,10 +202,53 @@ const char *a_Dialog_input(const char *title, const char *msg)
    static Fl_Menu_Item *pm = 0;
    int ww = 450, wh = 130, gap = 10, ih = 60, bw = 80, bh = 30;
 
+   if (Dialog_suppressed("input", title, msg))
+      return NULL;
+
    input_answer = 0;
 
    if (!(title && *title))
       title = "Dillo: Input";
+
+#ifdef __APPLE__
+   {
+      int n = dList_length(prefs.search_urls);
+      char **labels = (char **)calloc((size_t)n, sizeof(char *));
+      int *sourceIndexes = (int *)calloc((size_t)n, sizeof(int));
+      int selected = 0, valid = 0, chosen = 0;
+
+      if (!labels || !sourceIndexes) {
+         MSG("calloc failed: %s\n", strerror(errno));
+         free(labels);
+         free(sourceIndexes);
+         return NULL;
+      }
+
+      for (int i = 0; i < n; i++) {
+         char *label, *url;
+         char *source = (char *)dList_nth_data(prefs.search_urls, i);
+         if (!source || a_Misc_parse_search_url(source, &label, &url) < 0)
+            continue;
+         labels[valid] = dStrdup(label);
+         sourceIndexes[valid] = i;
+         if (i == prefs.search_url_idx)
+            selected = valid;
+         valid++;
+      }
+
+      chosen = selected;
+      const char *answer = a_Mac_search_dialog(
+         title, msg, (const char *const *)labels, valid, selected, &chosen);
+      if (answer && chosen >= 0 && chosen < valid)
+         prefs.search_url_idx = sourceIndexes[chosen];
+
+      for (int i = 0; i < valid; i++)
+         dFree(labels[i]);
+      free(labels);
+      free(sourceIndexes);
+      return answer;
+   }
+#endif
 
    Fl_Window *window = new Fl_Window(ww,wh,title);
    window->set_modal();
@@ -262,6 +329,8 @@ const char *a_Dialog_passwd(const char *title, const char *msg)
 {
    if (!(title && *title))
       title = "Dillo: Password";
+   if (Dialog_suppressed("password", title, msg))
+      return NULL;
    fl_message_title(title);
    return fl_password("%s", "", msg);
 }
@@ -274,7 +343,13 @@ const char *a_Dialog_passwd(const char *title, const char *msg)
 const char *a_Dialog_save_file(const char *title,
                                const char *pattern, const char *fname)
 {
+   if (Dialog_suppressed("file chooser", title, fname))
+      return NULL;
+#ifdef __APPLE__
+   return a_Mac_save_file_dialog(title, pattern, fname);
+#else
    return fl_file_chooser(title, pattern, fname);
+#endif
 }
 
 /**
@@ -285,11 +360,9 @@ const char *a_Dialog_save_file(const char *title,
 const char *a_Dialog_select_file(const char *title,
                                  const char *pattern, const char *fname)
 {
-   /*
-    * FileChooser::type(MULTI) appears to allow multiple files to be selected,
-    * but just follow save_file's path for now.
-    */
-   return a_Dialog_save_file(title, pattern, fname);
+   if (Dialog_suppressed("file chooser", title, fname))
+      return NULL;
+   return fl_file_chooser(title, pattern, fname);
 }
 
 /**
@@ -302,6 +375,8 @@ char *a_Dialog_open_file(const char *title,
 {
    const char *fc_name;
 
+   if (Dialog_suppressed("file chooser", title, fname))
+      return NULL;
    fc_name = fl_file_chooser(title, pattern, fname);
    return (fc_name) ? a_Misc_escape_chars(fc_name, "% #") : NULL;
 }
@@ -374,6 +449,10 @@ int a_Dialog_choice(const char *title, const char *msg, ...)
 
    if (title == NULL || *title == '\0')
       title = "Dillo: Choice";
+
+   /* 0 is "dialog was cancelled"; every caller treats it as refuse/abort */
+   if (Dialog_suppressed("choice", title, msg))
+      return 0;
 
    va_start(ap, msg);
    for (n = 0; va_arg(ap, char *) != NULL; n++);
@@ -449,6 +528,8 @@ int a_Dialog_user_password(const char *title, const char *msg,
    /* window is resized below */
    if (!(title && *title))
       title = "Dillo: User/Password";
+   if (Dialog_suppressed("user/password", title, msg))
+      return 0;
    Fl_Window *window = new Fl_Window(window_w,window_h,title);
    Fl_Group::current(0);
    window->user_data(NULL);
@@ -519,4 +600,3 @@ int a_Dialog_user_password(const char *title, const char *msg,
 
    return ok;
 }
-

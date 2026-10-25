@@ -22,6 +22,9 @@
 #include "ui.hh"
 #include "msg.h"
 #include "timeout.hh"
+#ifdef __APPLE__
+#include "macoslocation.hh"
+#endif
 #include "utf8.hh"
 #include "tipwin.hh"
 
@@ -292,19 +295,7 @@ static void search_cb(Fl_Widget *wid, void *data)
  */
 static void help_cb(Fl_Widget *w, void *)
 {
-   char *path = dStrconcat(DILLO_DOCDIR, "user_help.html", NULL);
-   BrowserWindow *bw = a_UIcmd_get_bw_by_widget(w);
-
-   if (access(path, R_OK) == 0) {
-      char *urlstr = dStrconcat("file:", path, NULL);
-      a_UIcmd_open_urlstr(bw, urlstr);
-      dFree(urlstr);
-   } else {
-      MSG("Can't read local help file at \"%s\"."
-          " Getting remote help...\n", path);
-      a_UIcmd_open_urlstr(bw, "https://dillo-browser.org/user_help.html");
-   }
-   dFree(path);
+   a_UIcmd_open_help(a_UIcmd_get_bw_by_widget(w), NULL);
 }
 
 /**
@@ -339,15 +330,19 @@ static void clear_cb(Fl_Widget *w, void *data)
  */
 static void location_cb(Fl_Widget *wid, void *data)
 {
-   Fl_Input *i = (Fl_Input*)wid;
    UI *ui = (UI*)data;
 
+   (void)wid;
    _MSG("location_cb()\n");
-   a_UIcmd_open_urlstr(a_UIcmd_get_bw_by_widget(i), i->value());
-
-   if (ui->temporaryPanels())
-      ui->panels_toggle();
+   ui->submit_location();
 }
+
+#ifdef __APPLE__
+static void mac_location_cb(void *data)
+{
+   ((UI *)data)->submit_location();
+}
+#endif
 
 
 /**
@@ -528,6 +523,10 @@ void UI::make_location(int ww)
      i->callback(location_cb, this);
      i->set_tooltip("Location");
      i->textsize((int) rint(14.0 * prefs.font_factor));
+#ifdef __APPLE__
+     /* The real editor is an AppKit NSTextField over this layout slot. */
+     i->hide();
+#endif
      p_xpos += i->w();
     LocationGroup->box(FL_THIN_UP_BOX);   // or FL_FLAT_BOX
     LocationGroup->end();
@@ -591,8 +590,15 @@ void UI::make_filemenu_button()
    btn->callback(filemenu_cb, this);
    btn->set_tooltip("File menu");
    btn->clear_visible_focus();
+#ifdef __APPLE__
+   /* The File menu lives in the system menu bar at the top of the screen
+    * (see a_Menu_sysmenubar_init), so keep it out of the window. Still build
+    * the button: the KEYS_FILE_MENU handler dereferences FileButton. */
+   btn->hide();
+#else
    if (!prefs.show_filemenu)
       btn->hide();
+#endif
 }
 
 
@@ -713,6 +719,9 @@ void UI::make_status_bar(int ww, int wh)
 UI::UI(int x, int y, int ui_w, int ui_h, const char* label, const UI *cur_ui) :
   CustGroupVertical(x, y, ui_w, ui_h, label)
 {
+#ifdef __APPLE__
+   NativeLocation = NULL;
+#endif
    LocBar = NavBar = StatusBar = NULL;
 
    Tabs = NULL;
@@ -762,6 +771,12 @@ UI::UI(int x, int y, int ui_w, int ui_h, const char* label, const UI *cur_ui) :
    if (Panelmode == UI_HIDDEN) {
       panels_toggle();
    }
+
+#ifdef __APPLE__
+   NativeLocation = a_Mac_location_new(this, mac_location_cb);
+   a_Mac_location_set(NativeLocation, Location->value());
+   sync_native_location();
+#endif
 }
 
 /**
@@ -770,7 +785,54 @@ UI::UI(int x, int y, int ui_w, int ui_h, const char* label, const UI *cur_ui) :
 UI::~UI()
 {
    _MSG("UI::~UI()\n");
+#ifdef __APPLE__
+   a_Mac_location_free(NativeLocation);
+#endif
 }
+
+void UI::draw()
+{
+   CustGroupVertical::draw();
+#ifdef __APPLE__
+   sync_native_location();
+#endif
+}
+
+void UI::resize(int xx, int yy, int ww, int hh)
+{
+   CustGroupVertical::resize(xx, yy, ww, hh);
+#ifdef __APPLE__
+   sync_native_location();
+#endif
+}
+
+void UI::show()
+{
+   CustGroupVertical::show();
+#ifdef __APPLE__
+   sync_native_location();
+#endif
+}
+
+void UI::hide()
+{
+   CustGroupVertical::hide();
+#ifdef __APPLE__
+   sync_native_location();
+#endif
+}
+
+#ifdef __APPLE__
+void UI::sync_native_location()
+{
+   if (!NativeLocation || !LocationGroup)
+      return;
+   a_Mac_location_sync(NativeLocation, window(),
+      LocationGroup->x(), LocationGroup->y(),
+      LocationGroup->w(), LocationGroup->h(),
+      visible_r() && LocationGroup->visible_r() && prefs.show_url);
+}
+#endif
 
 /**
  * FLTK event handler for this window.
@@ -813,6 +875,9 @@ int UI::handle(int event)
          ret = 1;
       } else if (cmd == KEYS_BOOKMARKS) {
          a_UIcmd_book(a_UIcmd_get_bw_by_widget(this), 0);
+         ret = 1;
+      } else if (cmd == KEYS_HISTORY) {
+         a_UIcmd_history(a_UIcmd_get_bw_by_widget(this));
          ret = 1;
       } else if (cmd == KEYS_FIND) {
          findbar_toggle(1);
@@ -897,7 +962,11 @@ int UI::handle(int event)
  */
 const char *UI::get_location()
 {
+#ifdef __APPLE__
+   return a_Mac_location_get(NativeLocation);
+#else
    return Location->value();
+#endif
 }
 
 /**
@@ -907,7 +976,11 @@ void UI::set_location(const char *str)
 {
    if (!str) str = "";
    Location->value(str);
+#ifdef __APPLE__
+   a_Mac_location_set(NativeLocation, str);
+#else
    ((CustInput *) Location)->d_position((Fl::focus() == Location) ? strlen(str) : 0);
+#endif
 }
 
 /**
@@ -920,9 +993,21 @@ void UI::focus_location()
       panels_toggle();
       temporaryPanels(true);
    }
+#ifdef __APPLE__
+   sync_native_location();
+   a_Mac_location_focus(NativeLocation);
+#else
    Location->take_focus();
    // Make text selected when already focused.
    ((CustInput *) Location)->d_position(Location->size(), 0);
+#endif
+}
+
+void UI::submit_location()
+{
+   a_UIcmd_open_urlstr(a_UIcmd_get_bw_by_widget(this), get_location());
+   if (temporaryPanels())
+      panels_toggle();
 }
 
 /**
@@ -1044,8 +1129,14 @@ void UI::customize()
       Location->hide();
    if ( !prefs.show_search )
       Search->hide();
+#ifdef __APPLE__
+   /* Help is a top-level menu in the system menu bar (see
+    * a_Menu_sysmenubar_init), so keep the button out of the window. */
+   Help->hide();
+#else
    if ( !prefs.show_help )
       Help->hide();
+#endif
    if ( !prefs.show_progress_box ) {
       IProg->hide();
       PProg->hide();
@@ -1055,6 +1146,9 @@ void UI::customize()
       NavBar->rearrange();
    if (LocBar)
       LocBar->rearrange();
+#ifdef __APPLE__
+   sync_native_location();
+#endif
 }
 
 /**
@@ -1062,7 +1156,7 @@ void UI::customize()
  */
 void UI::change_panel(int new_size, int small_icons)
 {
-   char *loc_text = dStrdup(Location->value());
+   char *loc_text = dStrdup(get_location());
 
    // Remove current panel's bars
    init_sizes();
@@ -1082,8 +1176,8 @@ void UI::change_panel(int new_size, int small_icons)
    a_UIcmd_set_buttons_sens(a_UIcmd_get_bw_by_widget(this));
 
    TopGroup->rearrange();
-   Location->value(loc_text);
-   Location->take_focus();
+   set_location(loc_text);
+   focus_location();
 
    dFree(loc_text);
 }
@@ -1187,4 +1281,7 @@ void UI::panels_toggle()
 
    TopGroup->rearrange();
    Panelmode = (hide) ? UI_HIDDEN : UI_NORMAL;
+#ifdef __APPLE__
+   sync_native_location();
+#endif
 }

@@ -1,0 +1,626 @@
+/*
+ * Dillo iOS — Objective-C++ bridge around the dw engine + parser.
+ *
+ * One DilloBridge is one browser window: it owns the Layout/Platform/View
+ * for the app's lifetime and creates a fresh DilloHtml per page load
+ * (Layout::setWidget frees the previous page's widget tree, which in turn
+ * frees the previous DilloHtml via its delete callback — the same
+ * lifecycle the desktop uses).
+ *
+ * Compiled with -fno-exceptions/-fno-rtti to match the engine.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 3 of the License, or
+ * (at your option) any later version.
+ */
+
+#import "DilloBridge.h"
+#import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
+
+#include <math.h>
+#include <stdio.h>
+#include <string.h>
+#include <string>
+#include <objc/runtime.h>
+
+#include "dw/core.hh"
+#include "dw/textblock.hh"
+
+#include "src/prefs.h"
+#include "src/bw.h"
+#include "src/web.hh"
+#include "src/html_common.hh"
+#include "src/styleengine.hh"
+
+#include "AppleCoreTextPlatform.hh"
+#include "CoreGraphicsView.hh"
+#include "IosShell.hh"
+#include "NativeFormResources.h"
+
+/// Delegate for the file picker (file-input support).
+@interface FilePickerDelegate : NSObject <UIDocumentPickerDelegate>
+@property (nonatomic, copy, nullable) void (^onPick)(NSURL *_Nullable url);
+@end
+
+@implementation FilePickerDelegate
+- (void)documentPicker:(UIDocumentPickerViewController *)controller
+    didPickDocumentsAtURLs:(NSArray<NSURL *> *)urls
+{
+   if (self.onPick)
+      self.onPick (urls.firstObject);
+}
+- (void)documentPickerWasCancelled:(UIDocumentPickerViewController *)controller
+{
+   if (self.onPick)
+      self.onPick (nil);
+}
+@end
+
+/// One in-flight image fetch (owned by _pendingImages until it completes
+/// or the page is left).
+@interface PendingImage : NSObject
+@property (nonatomic, assign) DilloWeb *web;
+@property (nonatomic, assign) int clientKey;
+@property (nonatomic, strong) NSURLSessionDataTask *task;
+@end
+@implementation PendingImage
+@end
+
+@interface DilloContextInfo ()
+- (instancetype)initWithKind:(DilloContextKind)kind
+                          url:(NSString *)url
+                      linkURL:(nullable NSString *)linkURL;
+@end
+
+@implementation DilloContextInfo
+- (instancetype)initWithKind:(DilloContextKind)kind
+                          url:(NSString *)url
+                      linkURL:(nullable NSString *)linkURL
+{
+   self = [super init];
+   if (self) {
+      _kind = kind;
+      _url = [url copy];
+      _linkURL = [linkURL copy];
+   }
+   return self;
+}
+@end
+
+@interface DilloBridge ()
+@property (nonatomic, strong, nullable) DilloContextInfo *pendingContext;
+@end
+
+@implementation DilloBridge {
+   dw::apple::ApplePlatform *_platform;   // owned by _layout
+   dw::core::Layout *_layout;
+   dw::apple::CoreGraphicsView *_view;    // owned by _layout
+   BrowserWindow *_bw;
+   char *_pageBuf;       // current page's parser buffer (mutated, retained)
+   char *_oldPageBuf;    // previous page's buffer, freed after widget swap
+   NSString *_currentHTML;       // immutable source for zoom reparses
+   NSString *_currentURLString;
+   NSURLSession *_imageSession;
+   NSMutableDictionary<NSNumber *, PendingImage *> *_pendingImages;
+   dw::core::ui::ResourceFactory *_formFactory;
+   UIView *_formHost;
+   std::string _selectedFilePath;   // storage backing a_UIcmd_select_file
+   BOOL _haveSelectedFile;
+   DilloUrl *_currentPageUrl;       // for same-document fragment checks
+}
+
+static void invalidateTrampoline (void *data)
+{
+   DilloBridge *self = (__bridge DilloBridge *)data;
+   if (self.onInvalidate)
+      self.onInvalidate ();
+}
+
+static void scrollToTrampoline (void *data, int x, int y)
+{
+   DilloBridge *self = (__bridge DilloBridge *)data;
+   if (self.onScrollTo)
+      self.onScrollTo (CGPointMake (x, y));
+}
+
+static void copyTrampoline (void *ctx, const char *text)
+{
+   DilloBridge *self = (__bridge DilloBridge *)ctx;
+   NSString *s = [NSString stringWithUTF8String:text];
+   [UIPasteboard generalPasteboard].string = s;
+   if (self.onCopy)
+      self.onCopy (s);
+}
+
+static void contextTrampoline (void *ctx, dw::ios::ContextKind kind,
+                               const DilloUrl *url,
+                               const DilloUrl *linkUrl)
+{
+   DilloBridge *self = (__bridge DilloBridge *)ctx;
+   if (kind == dw::ios::CONTEXT_PAGE || !url)
+      return;
+
+   NSString *urlString = [NSString stringWithUTF8String:URL_STR (url)];
+   NSString *linkString = linkUrl ?
+      [NSString stringWithUTF8String:URL_STR (linkUrl)] : nil;
+   DilloContextKind shellKind = kind == dw::ios::CONTEXT_IMAGE ?
+      DilloContextKindImage : DilloContextKindLink;
+   self.pendingContext = [[DilloContextInfo alloc]
+      initWithKind:shellKind url:urlString linkURL:linkString];
+}
+
+static void openUrlTrampoline (void *ctx, const DilloUrl *url)
+{
+   DilloBridge *self = (__bridge DilloBridge *)ctx;
+   NSLog (@"DilloBridge: navigate: %s%s", URL_STR (url),
+          (URL_FLAGS (url) & URL_Post) ? " (POST)" : "");
+   if (!self.onOpenURL)
+      return;
+
+   NSString *urlString = [NSString stringWithUTF8String:URL_STR (url)];
+   NSData *body = nil;
+   NSString *contentType = nil;
+
+   if ((URL_FLAGS (url) & URL_Post) && URL_DATA (url)) {
+      Dstr *data = URL_DATA (url);
+      body = [NSData dataWithBytes:data->str length:data->len];
+      if (URL_FLAGS (url) & URL_MultipartEnc) {
+         /* The boundary is the first body line minus the leading dashes
+          * (this is how the desktop http.c derives it too). */
+         NSString *boundary = nil;
+         if (data->len > 2 && data->str[0] == '-' && data->str[1] == '-') {
+            const char *end = (const char *) memchr (data->str, '\r',
+                                                     data->len);
+            if (end)
+               boundary = [[NSString alloc]
+                             initWithBytes:data->str + 2
+                                    length:end - data->str - 2
+                                  encoding:NSUTF8StringEncoding];
+         }
+         contentType = boundary ?
+            [NSString stringWithFormat:
+                @"multipart/form-data; boundary=%@", boundary] :
+            @"multipart/form-data";
+      } else {
+         contentType = @"application/x-www-form-urlencoded";
+      }
+   }
+
+   self.onOpenURL (urlString, body, contentType);
+}
+
+static void titleTrampoline (void *ctx, const char *title)
+{
+   DilloBridge *self = (__bridge DilloBridge *)ctx;
+   if (self.onTitle)
+      self.onTitle ([NSString stringWithUTF8String:title]);
+}
+
+static void imageFetchTrampoline (void *ctx, DilloWeb *web, int clientKey)
+{
+   DilloBridge *self = (__bridge DilloBridge *)ctx;
+   [self fetchImageForWeb:web clientKey:clientKey];
+}
+
+static const char *selectFileTrampoline (void *ctx)
+{
+   DilloBridge *self = (__bridge DilloBridge *)ctx;
+   return [self modalSelectFile];
+}
+
+/* One-time engine-wide initialization; mirrors the relevant subset (and
+ * order) of dillo.cc's main(). */
+static void initDilloOnce (void)
+{
+   static bool done = false;
+   if (done)
+      return;
+   done = true;
+
+   a_Prefs_init ();
+
+   /* The desktop defaults (DejaVu) don't exist on iOS; use fonts that do. */
+   dFree (prefs.font_serif);      prefs.font_serif = dStrdup ("Georgia");
+   dFree (prefs.font_sans_serif); prefs.font_sans_serif =
+                                     dStrdup ("Helvetica Neue");
+   dFree (prefs.font_monospace);  prefs.font_monospace =
+                                     dStrdup ("Courier New");
+   dFree (prefs.font_cursive);    prefs.font_cursive =
+                                     dStrdup ("Snell Roundhand");
+   dFree (prefs.font_fantasy);    prefs.font_fantasy = dStrdup ("Papyrus");
+
+   prefs.load_images = TRUE;
+
+   a_Web_init ();
+   a_Bw_init ();
+   StyleEngine::init ();
+}
+
+- (instancetype)initWithViewportWidth:(int)width height:(int)height
+{
+   self = [super init];
+   if (!self)
+      return nil;
+
+   initDilloOnce ();
+
+   _platform = new dw::apple::ApplePlatform ();
+   _layout = new dw::core::Layout (_platform);
+
+   _view = new dw::apple::CoreGraphicsView ();
+   _view->setInvalidateFunc (invalidateTrampoline, (__bridge void *)self);
+   _view->setScrollToFunc (scrollToTrampoline, (__bridge void *)self);
+   _layout->attachView (_view);
+
+   _bw = a_Bw_new ();
+   _bw->render_layout = _layout;
+
+   _pageBuf = NULL;
+   _oldPageBuf = NULL;
+
+   _imageSession =
+      [NSURLSession sessionWithConfiguration:
+                       [NSURLSessionConfiguration defaultSessionConfiguration]];
+   _pendingImages = [NSMutableDictionary dictionary];
+
+   _layout->viewportSizeChanged (_view, width, height);
+
+   dw::ios::setShellHooks (openUrlTrampoline, titleTrampoline,
+                           imageFetchTrampoline, selectFileTrampoline,
+                           copyTrampoline, contextTrampoline,
+                           (__bridge void *)self);
+
+   return self;
+}
+
+/*
+ * File input support, in two phases (no nested run loops — UIKit refuses
+ * to complete a presentation while a touch event is held up):
+ *
+ * 1. First click: form.cc's readFile calls a_UIcmd_select_file; nothing
+ *    is stored yet, so the picker is presented asynchronously and NULL is
+ *    returned (that click's readFile is a no-op).
+ * 2. The user picks a file; the completion stores the local path and
+ *    re-fires the same button's click. This time readFile's
+ *    a_UIcmd_select_file call finds the stored path and consumes it —
+ *    file read, button label updated, all inside dillo's own flow.
+ */
+- (const char *)modalSelectFile
+{
+   if (_haveSelectedFile) {
+      _haveSelectedFile = NO;
+      return _selectedFilePath.c_str ();
+   }
+
+   UIViewController *rootVC = _formHost.window.rootViewController;
+   if (!rootVC)
+      return NULL;
+
+   UIDocumentPickerViewController *picker =
+      [[UIDocumentPickerViewController alloc]
+         initForOpeningContentTypes:@[ UTTypeItem ] asCopy:YES];
+   __weak DilloBridge *weakSelf = self;
+   FilePickerDelegate *delegate = [FilePickerDelegate new];
+   delegate.onPick = ^(NSURL *url) {
+      DilloBridge *self = weakSelf;
+      if (!self || !url)
+         return;
+      self->_selectedFilePath = url.path.UTF8String;
+      self->_haveSelectedFile = YES;
+      dw::ios::refireLastLabelClick ();
+   };
+   picker.delegate = delegate;
+   /* keep the delegate alive as long as the picker */
+   objc_setAssociatedObject (picker, "dillo.pickerDelegate", delegate,
+                             OBJC_ASSOCIATION_RETAIN);
+
+   [rootVC presentViewController:picker animated:YES completion:nil];
+   return NULL;
+}
+
+/* Fetch one image asynchronously; deliver (or abort) on the main thread.
+ * The engine is single-threaded — every engine call stays on main. */
+- (void)fetchImageForWeb:(DilloWeb *)web clientKey:(int)clientKey
+{
+   NSString *urlString =
+      [NSString stringWithUTF8String:URL_STR (web->url)];
+   NSURL *url = [NSURL URLWithString:urlString];
+   if (!url) {
+      dw::ios::abortImageWeb (web, clientKey);
+      return;
+   }
+
+   PendingImage *pending = [PendingImage new];
+   pending.web = web;
+   pending.clientKey = clientKey;
+   NSNumber *key = @(clientKey);
+   _pendingImages[key] = pending;
+
+   __weak DilloBridge *weakSelf = self;
+   pending.task = [_imageSession dataTaskWithURL:url
+                 completionHandler:^(NSData *data, NSURLResponse *response,
+                                     NSError *error) {
+      dispatch_async (dispatch_get_main_queue (), ^{
+         DilloBridge *self = weakSelf;
+         if (!self)
+            return;
+         /* If the page was left, cancelPendingImages already freed the
+          * web; the entry's absence tells us to do nothing. */
+         PendingImage *p = self->_pendingImages[key];
+         if (!p)
+            return;
+         [self->_pendingImages removeObjectForKey:key];
+
+         if (error || !data || data.length == 0)
+            dw::ios::abortImageWeb (p.web, p.clientKey);
+         else
+            dw::ios::deliverImageData (p.web, p.clientKey,
+                                       data.bytes, (int) data.length);
+         self->_platform->runIdles ();
+         if (self.onInvalidate)
+            self.onInvalidate ();
+      });
+   }];
+   [pending.task resume];
+}
+
+- (void)cancelPendingImages
+{
+   for (NSNumber *key in _pendingImages) {
+      PendingImage *p = _pendingImages[key];
+      [p.task cancel];
+      dw::ios::cancelImageWeb (p.web, p.clientKey);
+   }
+   [_pendingImages removeAllObjects];
+}
+
+- (void)setFormHost:(UIView *)host
+{
+   _formHost = host;
+   if (_formFactory)
+      dw::ios::destroyNativeResourceFactory (_formFactory);
+   _formFactory = dw::ios::createNativeResourceFactory (host);
+   _platform->setResourceFactory (_formFactory);
+}
+
+- (void)dealloc
+{
+   [self cancelPendingImages];
+   dw::ios::setShellHooks (NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+   delete _layout;   // deletes platform, view, widget tree → DilloHtml
+   a_Bw_free (_bw);
+   dFree (_pageBuf);
+   dFree (_oldPageBuf);
+   if (_currentPageUrl)
+      a_Url_free (_currentPageUrl);
+   if (_formFactory)
+      dw::ios::destroyNativeResourceFactory (_formFactory);
+}
+
+- (NSString *)resolveURL:(NSString *)href baseURL:(NSString *)base
+{
+   DilloUrl *baseUrl = a_Url_new ([base UTF8String], NULL);
+   if (!baseUrl)
+      return nil;
+   DilloUrl *url = a_Url_new ([href UTF8String], URL_STR (baseUrl));
+   NSString *result =
+      url ? [NSString stringWithUTF8String:URL_STR (url)] : nil;
+   a_Url_free (url);
+   a_Url_free (baseUrl);
+   return result;
+}
+
+- (void)clearCache
+{
+   dw::ios::cacheClear ();
+}
+
+- (void)seedCSS:(NSString *)cssText forURL:(NSString *)url
+{
+   const char *bytes = [cssText UTF8String];
+   dw::ios::cachePut ([url UTF8String], "text/css; charset=UTF-8",
+                      bytes, (int) strlen (bytes));
+}
+
+- (void)loadHTML:(NSString *)html url:(NSString *)urlString
+{
+   /* Leaving the page: outstanding image fetches must not touch the old
+    * widget tree once it's freed below, and a picked-but-unconsumed file
+    * must not leak into another page's form. */
+   [self cancelPendingImages];
+   _haveSelectedFile = NO;
+
+   /* The parser mutates its private dStrdup below. Keep the pristine source
+    * so changing zoom can rebuild styles without another network request. */
+   _currentHTML = [html copy];
+   _currentURLString = [urlString copy];
+
+   DilloUrl *url = a_Url_new ([urlString UTF8String], NULL);
+
+   DilloHtml *page = new DilloHtml (_bw, url, "text/html; charset=UTF-8");
+
+   /* Mirror a_Web_dispatch_by_type()'s RootUrl block. */
+   {
+      dw::core::style::Color *bgColor =
+         dw::core::style::Color::create (_layout, prefs.bg_color);
+      _layout->setBgColor (bgColor);
+
+      StyleEngine styleEngine (_layout, url, url, _bw->zoom);
+      styleEngine.startElement ("body", _bw);
+      page->dw->setStyle (styleEngine.style (_bw));
+   }
+
+   /* This frees the previous widget tree → previous DilloHtml; only after
+    * that may the previous page buffer be released. */
+   _layout->setWidget (page->dw);
+   dFree (_oldPageBuf);
+   _oldPageBuf = NULL;
+
+   /* The parser tokenizes the buffer IN PLACE and retains the pointer
+    * (Start_Buf), so it needs writable heap memory that outlives it. */
+   _pageBuf = dStrdup ([html UTF8String]);
+   page->write (_pageBuf, strlen (_pageBuf), 1 /* Eof */);
+   page->finishParsing (0 /* ClientKey; no cache client exists */);
+   _oldPageBuf = _pageBuf;   // becomes "previous" on the next load
+   _pageBuf = NULL;
+
+   if (_currentPageUrl)
+      a_Url_free (_currentPageUrl);
+   _currentPageUrl = a_Url_dup (url);
+
+   /* Deep links: page.html#section scrolls once layout settles. */
+   const char *fragment = URL_FRAGMENT_ (url);
+   if (fragment && *fragment)
+      _layout->setAnchor (fragment);
+
+   a_Url_free (url);
+
+   _platform->runIdles ();
+
+   if (self.onInvalidate)
+      self.onInvalidate ();
+}
+
+- (void)setViewportWidth:(int)width height:(int)height
+{
+   _layout->viewportSizeChanged (_view, width, height);
+   _platform->runIdles ();
+   if (self.onInvalidate)
+      self.onInvalidate ();
+}
+
+- (float)zoomFactor
+{
+   return _bw->zoom;
+}
+
+- (float)applyZoom:(float)zoom
+{
+   /* Match the desktop zoom limits. The gesture shell uses a narrower range
+    * for ergonomics, while the bridge keeps the engine invariant explicit. */
+   float clamped = fmaxf (0.10f, fminf (10.0f, zoom));
+   if (fabsf (clamped - _bw->zoom) < 0.001f)
+      return _bw->zoom;
+
+   _bw->zoom = clamped;
+   if (_currentHTML && _currentURLString) {
+      NSString *html = _currentHTML;
+      NSString *url = _currentURLString;
+      [self loadHTML:html url:url];
+   }
+   return _bw->zoom;
+}
+
+- (void)tapAtX:(int)x y:(int)y
+{
+   _layout->buttonPress (_view, 1, x, y, dw::core::BUTTON1_MASK, 1);
+   _layout->buttonRelease (_view, 1, x, y, dw::core::BUTTON1_MASK, 1);
+}
+
+- (DilloContextInfo *)contextInfoAtX:(int)x y:(int)y
+{
+   self.pendingContext = nil;
+   _layout->buttonPress (_view, 1, x, y, dw::core::BUTTON3_MASK, 3);
+   _layout->buttonRelease (_view, 1, x, y, dw::core::BUTTON3_MASK, 3);
+   DilloContextInfo *result = self.pendingContext;
+   self.pendingContext = nil;
+   return result;
+}
+
+- (void)selectionBeganAtX:(int)x y:(int)y
+{
+   _layout->buttonPress (_view, 1, x, y, dw::core::BUTTON1_MASK, 1);
+}
+
+- (void)selectionMovedToX:(int)x y:(int)y
+{
+   _layout->motionNotify (_view, x, y, dw::core::BUTTON1_MASK);
+}
+
+- (void)selectionEndedAtX:(int)x y:(int)y
+{
+   _layout->buttonRelease (_view, 1, x, y, dw::core::BUTTON1_MASK, 1);
+}
+
+- (void)reportScrollX:(int)x y:(int)y
+{
+   _layout->scrollPosChanged (_view, x, y);
+}
+
+- (BOOL)navigateFragment:(NSString *)urlString
+{
+   if (!_currentPageUrl)
+      return NO;
+
+   DilloUrl *target = a_Url_new ([urlString UTF8String], NULL);
+   if (!target)
+      return NO;
+
+   const char *fragment = URL_FRAGMENT_ (target);
+   /* Same document? Compare everything except the fragment. */
+   BOOL same = fragment && *fragment &&
+      a_Url_cmp (_currentPageUrl, target) == 0;
+   if (same) {
+      _layout->setAnchor (fragment);
+      _platform->runIdles ();
+   }
+   a_Url_free (target);
+   return same;
+}
+
+- (int)findText:(NSString *)key caseSensitive:(BOOL)caseSens
+      backwards:(BOOL)backwards
+{
+   dw::core::FindtextState::Result result =
+      _layout->search ([key UTF8String], caseSens ? true : false,
+                       backwards ? true : false);
+   _platform->runIdles ();
+   if (self.onInvalidate)
+      self.onInvalidate ();
+   return (int) result;
+}
+
+- (void)resetFind
+{
+   _layout->resetSearch ();
+   if (self.onInvalidate)
+      self.onInvalidate ();
+}
+
+- (int)canvasWidth
+{
+   return _view->getCanvasWidth ();
+}
+
+- (int)canvasHeight
+{
+   return _view->getCanvasHeight ();
+}
+
+- (void)drawIntoContext:(CGContextRef)ctx visibleRect:(CGRect)rect
+{
+   // Late-queued idles (e.g. a reflow) must run before painting.
+   _platform->runIdles ();
+
+   dw::core::Rectangle area;
+   area.x = (int) rect.origin.x;
+   area.y = (int) rect.origin.y;
+   area.width = (int) rect.size.width;
+   area.height = (int) rect.size.height;
+
+   /* The context's origin is the visible slice's top-left; shift it so
+    * canvas coordinates land in the right place, then expose only the
+    * visible area. */
+   CGContextSaveGState (ctx);
+   CGContextTranslateCTM (ctx, -rect.origin.x, -rect.origin.y);
+
+   _view->setCGContext (ctx);
+   _view->clearBackground (area.x, area.y, area.width, area.height);
+   _layout->expose (_view, &area);
+   _view->setCGContext (NULL);
+
+   CGContextRestoreGState (ctx);
+}
+
+@end

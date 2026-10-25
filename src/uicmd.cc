@@ -22,6 +22,12 @@
 #include <math.h>       /* for rint */
 #include <limits.h>     /* for UINT_MAX */
 #include <sys/stat.h>
+#include <unistd.h>   /* for access */
+
+#ifdef __APPLE__
+#  include <CoreServices/CoreServices.h>
+#  include "macosnative_tabs.hh"
+#endif
 
 #include <FL/Fl.H>
 #include <FL/Fl_Widget.H>
@@ -153,6 +159,9 @@ public:
       Pack = NULL;
       focus_counter = 0;
       tab_w = 50, tab_h = th, ctab_h = 1, btn_w = 20, ctl_w = 1*btn_w+2;
+#ifdef __APPLE__
+      ctab_h = 0;
+#endif
       resize(0,0,ww,ctab_h);
       /* tab buttons go inside a pack within a scroll */
       Scroll = new Fl_Scroll(0,0,ww-ctl_w,ctab_h);
@@ -474,18 +483,26 @@ void CustTabs::switch_tab(CustTabButton *cbtn)
 
 void CustTabs::prev_tab()
 {
+#ifdef __APPLE__
+   a_Mac_tabs_select_relative(window(), -1);
+#else
    int idx;
 
    if ((idx = get_btn_idx((UI*)Wizard->value())) != -1)
       switch_tab((CustTabButton*)Pack->child(idx>0 ? idx-1 : num_tabs()-1));
+#endif
 }
 
 void CustTabs::next_tab()
 {
+#ifdef __APPLE__
+   a_Mac_tabs_select_relative(window(), 1);
+#else
    int idx;
 
    if ((idx = get_btn_idx((UI*)Wizard->value())) != -1)
       switch_tab((CustTabButton*)Pack->child((idx+1<num_tabs()) ? idx+1 : 0));
+#endif
 }
 
 /**
@@ -493,8 +510,12 @@ void CustTabs::next_tab()
  */
 void CustTabs::switch_tab(int index)
 {
+#ifdef __APPLE__
+   a_Mac_tabs_select_index(window(), index);
+#else
    if (index >= 0 && index < num_tabs())
       switch_tab((CustTabButton*)Pack->child(index));
+#endif
 }
 
 /**
@@ -502,6 +523,9 @@ void CustTabs::switch_tab(int index)
  */
 void CustTabs::set_tab_label(UI *ui, const char *label)
 {
+#ifdef __APPLE__
+   a_Mac_tabs_set_title(ui->window(), label);
+#endif
    char title[128];
    int idx = get_btn_idx(ui);
 
@@ -603,6 +627,9 @@ BrowserWindow *a_UIcmd_browser_window_new(int ww, int wh,
    int focus = 1;
    new_bw = UIcmd_tab_new(DilloTabs, old_ui, focus);
    win->show();
+#ifdef __APPLE__
+   a_Mac_tabs_configure(win);
+#endif
 
    if (old_bw == NULL) {
       new_bw->zoom = prefs.zoom_factor;
@@ -713,6 +740,9 @@ void a_UIcmd_close_bw(void *vbw)
             _MSG("gone: tmp=%p tabgroups=%p\n", (void *) tmp, (void *) tabgroups);
             delete tmp;
          }
+#ifdef __APPLE__
+         a_Mac_tabs_remove(tabs->window());
+#endif
          delete tabs->window();
       }
    }
@@ -866,8 +896,15 @@ void a_UIcmd_open_url_nw(BrowserWindow *bw, const DilloUrl *url)
 void a_UIcmd_open_url_nt(void *vbw, const DilloUrl *url, int focus)
 {
    BrowserWindow *bw = (BrowserWindow *)vbw;
+#ifdef __APPLE__
+   int w, h;
+   a_UIcmd_get_wh(bw, &w, &h);
+   BrowserWindow *new_bw = a_UIcmd_browser_window_new(w, h, 0, bw);
+   a_Mac_tabs_add(BW2UI(bw)->window(), BW2UI(new_bw)->window(), focus);
+#else
    BrowserWindow *new_bw = UIcmd_tab_new(BW2UI(bw)->tabs(),
                                          bw ? BW2UI(bw) : NULL, focus);
+#endif
    /* Preserve same zoom factor in new tab */
    new_bw->zoom = bw->zoom;
    UIcmd_open_url_nbw(new_bw, url);
@@ -932,6 +969,97 @@ void a_UIcmd_home(void *vbw, int nt)
       a_UIcmd_open_url((BrowserWindow*)vbw, prefs.home);
 }
 
+#ifdef __APPLE__
+/*
+ * Show the Apple help book, if this copy of dillo is running from an
+ * application bundle that declares one (see mac/Info.plist.in).
+ *
+ * Returns FALSE when there is no help book, so the caller can fall back to
+ * opening the manual in a tab. Only the book's main page is reachable this
+ * way; the manual remains the full reference.
+ */
+static bool_t UIcmd_show_help_book(void)
+{
+   CFBundleRef bundle = CFBundleGetMainBundle();
+   CFStringRef name;
+   char book[256], url[320];
+   uint_t o = 0;
+
+   if (!bundle)
+      return FALSE;
+   name = (CFStringRef) CFBundleGetValueForInfoDictionaryKey(bundle,
+             CFSTR("CFBundleHelpBookName"));
+   if (!name || CFGetTypeID(name) != CFStringGetTypeID() ||
+       !CFStringGetCString(name, book, sizeof(book), kCFStringEncodingUTF8))
+      return FALSE;
+
+   /* The book name comes from our own Info.plist, so escaping spaces is
+    * enough to make a valid help: URL out of it. */
+   strcpy(url, "help:openbook=");
+   o = strlen(url);
+   for (uint_t i = 0; book[i] && o + 4 < sizeof(url); i++) {
+      if (book[i] == ' ') {
+         memcpy(url + o, "%20", 3);
+         o += 3;
+      } else {
+         url[o++] = book[i];
+      }
+   }
+   url[o] = '\0';
+
+   CFStringRef str = CFStringCreateWithCString(NULL, url,
+                                               kCFStringEncodingUTF8);
+   CFURLRef cfurl = CFURLCreateWithString(NULL, str, NULL);
+   bool_t ok = FALSE;
+
+   if (cfurl) {
+      ok = (LSOpenCFURLRef(cfurl, NULL) == noErr);
+      CFRelease(cfurl);
+   }
+   CFRelease(str);
+   return ok;
+}
+#endif /* __APPLE__ */
+
+/*
+ * Open the user help page: the local copy if it is installed, otherwise the
+ * one on the website.
+ */
+void a_UIcmd_open_help(BrowserWindow *bw, const char *fragment)
+{
+#ifdef __APPLE__
+   /* No fragment means the plain "Dillo Help" entry: prefer the help book. */
+   if (!fragment && UIcmd_show_help_book())
+      return;
+#endif
+
+   /* Installed copy first, then the one built in an uninstalled tree. */
+   const char *dirs[] = { DILLO_DOCDIR, DILLO_BUILD_DOCDIR };
+   char *urlstr = NULL;
+
+   for (uint_t i = 0; i < sizeof(dirs) / sizeof(dirs[0]) && !urlstr; i++) {
+      char *path = dStrconcat(dirs[i], "user_help.html", NULL);
+
+      if (access(path, R_OK) == 0)
+         urlstr = dStrconcat("file:", path, NULL);
+      dFree(path);
+   }
+
+   if (!urlstr) {
+      MSG("No local help file found, getting remote help...\n");
+      urlstr = dStrdup("https://dillo-browser.org/user_help.html");
+   }
+
+   if (fragment) {
+      char *anchored = dStrconcat(urlstr, "#", fragment, NULL);
+      dFree(urlstr);
+      urlstr = anchored;
+   }
+
+   a_UIcmd_open_urlstr(bw, urlstr);
+   dFree(urlstr);
+}
+
 /*
  * Reload current URL
  */
@@ -953,12 +1081,48 @@ BrowserWindow *a_UIcmd_get_first_active_bw(void)
 }
 
 /*
+ * Return the bw of the tab shown in the frontmost window, or NULL if there
+ * is none. Used by the macOS system menu bar, which is application-global
+ * and so must resolve its target window at click time.
+ */
+BrowserWindow *a_UIcmd_get_active_bw(void)
+{
+#ifdef __APPLE__
+   for (struct Tabgroup *tg = tabgroups; tg; tg = tg->next) {
+      if (a_Mac_tabs_is_front(tg->tabs->window())) {
+         BrowserWindow *bw =
+            a_UIcmd_get_bw_by_widget(tg->tabs->wizard()->value());
+         if (bw)
+            return bw;
+      }
+   }
+#endif
+   for (Fl_Window *win = Fl::first_window(); win; win = Fl::next_window(win)) {
+      for (struct Tabgroup *tg = tabgroups; tg; tg = tg->next) {
+         if (tg->tabs->window() == win) {
+            BrowserWindow *bw =
+               a_UIcmd_get_bw_by_widget(tg->tabs->wizard()->value());
+            if (bw)
+               return bw;
+         }
+      }
+   }
+
+   /* No browser window on top (a dialog, say): fall back to any of them. */
+   return a_UIcmd_get_first_active_bw();
+}
+
+/*
  * Reload all active tabs
  */
 void a_UIcmd_reload_all_active()
 {
    struct Tabgroup *tg = tabgroups;
    for (tg = tabgroups; tg; tg = tg->next) {
+#ifdef __APPLE__
+      if (!a_Mac_tabs_is_selected(tg->tabs->window()))
+         continue;
+#endif
       BrowserWindow *bw = a_UIcmd_get_bw_by_widget(tg->tabs->wizard()->value());
       if (bw)
          a_UIcmd_reload(bw);
@@ -1107,6 +1271,11 @@ void a_UIcmd_init(void)
  */
 static int UIcmd_save_file_check(const char *name)
 {
+#ifdef __APPLE__
+   /* NSSavePanel already presents the native replacement confirmation. */
+   (void)name;
+   return 2;
+#else
    struct stat ss;
    if (stat(name, &ss) == 0) {
       Dstr *ds;
@@ -1122,6 +1291,7 @@ static int UIcmd_save_file_check(const char *name)
    } else {
       return 2; /* assume the file does not exist, so Continue */
    }
+#endif
 }
 
 /*
@@ -1305,6 +1475,44 @@ void a_UIcmd_book(void *vbw, int nt)
       a_UIcmd_open_url((BrowserWindow*)vbw, url);
 
    a_Url_free(url);
+}
+
+/*
+ * Show the persistent browsing history.
+ */
+void a_UIcmd_history(void *vbw)
+{
+   BrowserWindow *bw = (BrowserWindow*)vbw;
+   const DilloUrl *current = a_Nav_stack_size(bw) ?
+                             a_History_get_url(NAV_TOP_UIDX(bw)) : NULL;
+   DilloUrl *url;
+
+   /* Opening an already-displayed URL is normally a no-op. Reload here so a
+    * second History command (especially after Clear History) refreshes it. */
+   if (current && strcmp(URL_STR(current), "about:history") == 0) {
+      a_History_generate_page();
+      a_UIcmd_reload(bw);
+      return;
+   }
+   url = a_Url_new("about:history", NULL);
+   a_UIcmd_open_url(bw, url);
+   a_Url_free(url);
+}
+
+/*
+ * Clear both the in-memory and on-disk browsing history after confirmation.
+ */
+void a_UIcmd_clear_history(void *vbw)
+{
+   BrowserWindow *bw = (BrowserWindow*)vbw;
+   int choice = a_Dialog_choice("Dillo: Clear browsing history?",
+      "This permanently removes the saved list of pages you have visited.",
+      "Cancel", "Clear History", NULL);
+
+   if (choice == 2) {
+      a_History_clear();
+      a_UIcmd_history(bw);
+   }
 }
 
 /*
@@ -1622,9 +1830,11 @@ void a_UIcmd_set_page_title(BrowserWindow *bw, const char *label)
  */
 const char *a_UIcmd_get_page_title(BrowserWindow *bw)
 {
-   DilloUrl *url = a_Url_new(a_UIcmd_get_location_text(bw), NULL);
+   char *location = a_UIcmd_get_location_text(bw);
+   DilloUrl *url = a_Url_new(location, NULL);
    const char *title = a_History_get_title_by_url(url, 0);
    a_Url_free(url);
+   dFree(location);
    return title;
 }
 
@@ -1792,6 +2002,8 @@ int a_UIcmd_by_name(void *vbw, const char *cmd_name)
       tabs->next_tab();
    } else if (cmd == KEYS_NEW_WINDOW) {
       a_UIcmd_open_url_nw(bw, NULL);
+   } else if (cmd == KEYS_HISTORY) {
+      a_UIcmd_history(bw);
    } else {
       /* Unknown command or not implemented */
       return -1;

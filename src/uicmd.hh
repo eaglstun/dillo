@@ -24,6 +24,8 @@ BrowserWindow *a_UIcmd_browser_window_new(int ww, int wh,
                                           uint32_t xid, const void *v_bw);
 BrowserWindow *a_UIcmd_get_bw_by_widget(void *v_wid);
 BrowserWindow *a_UIcmd_get_first_active_bw(void);
+BrowserWindow *a_UIcmd_get_active_bw(void);
+void a_UIcmd_open_help(BrowserWindow *bw, const char *fragment);
 void a_UIcmd_send_event_to_tabs_by_wid(int e, void *v_wid);
 int a_UIcmd_by_name(void *vbw, const char *cmd_name);
 void a_UIcmd_open_urlstr(void *vbw, const char *urlstr);
@@ -56,6 +58,8 @@ const char *a_UIcmd_select_file(void);
 void a_UIcmd_search_dialog(void *vbw);
 const char *a_UIcmd_get_passwd(const char *user);
 void a_UIcmd_book(void *vbw, int nt);
+void a_UIcmd_history(void *vbw);
+void a_UIcmd_clear_history(void *vbw);
 void a_UIcmd_add_bookmark(BrowserWindow *bw, const DilloUrl *url);
 void a_UIcmd_panels_toggle(BrowserWindow *bw);
 void a_UIcmd_findtext_dialog(BrowserWindow *bw);
