@@ -430,6 +430,27 @@ int AppleImgbuf::backscaledY (int yScaled)
    return yScaled * root->height / height;
 }
 
+/**
+ * Wrap the (x, y, width, height) region of rawdata in a CGImage. No copy:
+ * the provider reads straight from rawdata, which outlives the draw.
+ */
+CGImageRef AppleImgbuf::createCGImage (int x, int y, int width, int height)
+{
+   const unsigned char *base = rawdata + bpp * (y * this->width + x);
+   size_t len = (size_t)bpp * this->width * height - bpp * x;
+   CGDataProviderRef provider =
+      CGDataProviderCreateWithData (NULL, base, len, NULL);
+   CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB ();
+   CGImageRef image =
+      CGImageCreate (width, height, 8, 8 * bpp, bpp * this->width, space,
+                     bpp == 4 ? (CGBitmapInfo)kCGImageAlphaLast
+                              : (CGBitmapInfo)kCGImageAlphaNone,
+                     provider, NULL, false, kCGRenderingIntentDefault);
+   CGColorSpaceRelease (space);
+   CGDataProviderRelease (provider);
+   return image;
+}
+
 void AppleImgbuf::draw (CGContextRef cg, int xRoot, int yRoot,
                         int x, int y, int width, int height)
 {
@@ -443,34 +464,27 @@ void AppleImgbuf::draw (CGContextRef cg, int xRoot, int yRoot,
    if (width <= 0 || height <= 0)
       return;
 
-   /* Wrap the requested rows in a CGImage (no copy; the provider reads
-    * straight from rawdata, which stays alive during the draw). */
-   const unsigned char *base = rawdata + bpp * (y * this->width + x);
-   size_t len = (size_t)bpp * this->width * height - bpp * x;
-   CGDataProviderRef provider =
-      CGDataProviderCreateWithData (NULL, base, len, NULL);
-   CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB ();
-   CGImageRef image =
-      CGImageCreate (width, height, 8, 8 * bpp, bpp * this->width, space,
-                     bpp == 4 ? (CGBitmapInfo)kCGImageAlphaLast
-                              : (CGBitmapInfo)kCGImageAlphaNone,
-                     provider, NULL, false, kCGRenderingIntentDefault);
+   /* A scaled buffer holds the image averaged down to its size in points,
+    * but the context is in points on a 2x/3x screen (more when zoomed): its
+    * pixels would be stretched into blocks. Instead let Core Graphics
+    * resample the full-resolution root straight into the destination, at
+    * device resolution, clipped to the region asked for. */
+   AppleImgbuf *src = isRoot () ? this : root;
+   CGImageRef image = src->createCGImage (0, 0, src->width, src->height);
+   if (!image)
+      return;
 
-   if (image) {
-      /* CGContextDrawImage draws y-up; flip locally so the image comes out
-       * upright in the y-down canvas context. */
-      CGContextSaveGState (cg);
-      CGContextTranslateCTM (cg, xRoot + x, yRoot + y + height);
-      CGContextScaleCTM (cg, 1, -1);
-      /* Row data is already scaled to this buffer's size: draw 1:1. */
-      CGContextSetInterpolationQuality (cg, kCGInterpolationNone);
-      CGContextDrawImage (cg, CGRectMake (0, 0, width, height), image);
-      CGContextRestoreGState (cg);
-      CGImageRelease (image);
-   }
-
-   CGColorSpaceRelease (space);
-   CGDataProviderRelease (provider);
+   CGContextSaveGState (cg);
+   CGContextClipToRect (cg, CGRectMake (xRoot + x, yRoot + y, width, height));
+   /* CGContextDrawImage draws y-up; flip locally so the image comes out
+    * upright in the y-down canvas context. */
+   CGContextTranslateCTM (cg, xRoot, yRoot + this->height);
+   CGContextScaleCTM (cg, 1, -1);
+   CGContextSetInterpolationQuality (cg, kCGInterpolationHigh);
+   CGContextDrawImage (cg, CGRectMake (0, 0, this->width, this->height),
+                       image);
+   CGContextRestoreGState (cg);
+   CGImageRelease (image);
 }
 
 } // namespace apple
