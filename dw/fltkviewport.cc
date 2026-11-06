@@ -23,6 +23,7 @@
 #include "fltkviewport.hh"
 
 #include <FL/Fl.H>
+#include <FL/Fl_Window.H>
 #include <FL/fl_draw.H>
 #include <FL/names.h>
 
