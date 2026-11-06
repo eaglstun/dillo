@@ -140,7 +140,7 @@ class UI : public CustGroupVertical {
    int MainIdx;
    // Panel customization variables
    int PanelSize, Small_Icons;
-   int p_xpos, p_ypos, bw, bh, mh, lh, nh, fh, sh, pw, lbl;
+   int p_xpos, p_ypos, bw, bh, mh, lh, nh, fh, sh, lbl;
    bool PanelTemporary;
 
    UIPanelmode Panelmode;
@@ -148,7 +148,7 @@ class UI : public CustGroupVertical {
                            int b_n, int start = 0);
    void make_toolbar(int tw, int th);
    void make_location(int ww);
-   void make_progress_bars(int wide, int thin_up);
+   void make_progress_bars(int x, int y, int h);
    void make_menubar(int x, int y, int w, int h);
    void make_filemenu_button();
    void make_panel(int ww);
