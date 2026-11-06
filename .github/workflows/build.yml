@@ -34,8 +34,18 @@ jobs:
     - name: make check
       run: |
         export DILLOBINDIR=$(readlink -f install/bin)
+        export DILLO_KEEP_WORKDIR=1
         cd build && make check || (cat test/html/test-suite.log; false)
         export DILLOBINDIR=
+    - name: Upload HTML test renders on failure
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: html-test-renders
+        path: |
+          build/test/html/**/*.workdir/
+          build/test/html/**/*.log
+        if-no-files-found: ignore
     - name: Check release fits in a floppy disk of 1.44 MB
       run: |
         cd build
@@ -182,6 +192,11 @@ jobs:
     - uses: actions/checkout@v4
     - uses: jirutka/setup-alpine@v1
       with:
+        # Alpine v3.24 moved to mbedTLS 4.x (crypto split out into TF-PSA-Crypto,
+        # no mbedtls_pk_get_name), which Dillo's TLS layer does not support yet.
+        # v3.23 is the last stable release shipping mbedTLS 3.6, which this job
+        # is named for.
+        branch: v3.23
         packages: >
           build-base
           autoconf
