@@ -176,7 +176,9 @@ dillo_SOURCES += \
 	macosnative_tabs.hh \
 	macosnative_tabs.mm \
 	macoscontextmenu.hh \
-	macoscontextmenu.mm
+	macoscontextmenu.mm \
+	macosappearance.hh \
+	macosappearance.mm
 endif
 
 # https://www.gnu.org/software/automake/manual/html_node/Built-Sources-Example.html

@@ -40,6 +40,7 @@ void a_Html_form_display_hiddens(void *v_html, void *v_form, bool_t display);
  */
 
 /* Links: html->links, same indices the renderer uses for link ids */
+int a_Html_color_scheme_sensitive(void *v_html);
 int a_Html_link_count(void *v_html);
 /* NULL when out of range or when the entry itself is NULL */
 DilloUrl *a_Html_link_url(void *v_html, int n);

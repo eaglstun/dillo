@@ -15,6 +15,7 @@ TESTS = \
 	history \
 	identity \
 	liang \
+	media_queries \
 	notsosimplevector \
 	shapes \
 	unicode_test
@@ -43,6 +44,16 @@ history_SOURCES = \
 history_LDADD = \
 	$(top_builddir)/dlib/libDlib.a
 notsosimplevector_SOURCES = notsosimplevector.cc
+media_queries_SOURCES = \
+	media_queries.cc \
+	$(top_srcdir)/src/cssparser.cc \
+	$(top_srcdir)/src/css.cc \
+	$(top_srcdir)/src/url.c \
+	$(top_srcdir)/src/colors.c
+media_queries_LDADD = \
+	$(top_builddir)/dw/libDw-core.a \
+	$(top_builddir)/lout/liblout.a \
+	$(top_builddir)/dlib/libDlib.a
 identity_SOURCES = identity.cc
 identity_LDADD = \
 	$(top_builddir)/lout/liblout.a \

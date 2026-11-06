@@ -68,6 +68,7 @@ StyleEngine::StyleEngine (dw::core::Layout *layout,
    doctree = new Doctree ();
    stack = new lout::misc::SimpleVector <Node> (1);
    cssContext = new CssContext ();
+   colorSchemeSensitive = false;
    buildUserStyle ();
    this->layout = layout;
    this->pageUrl = pageUrl ? a_Url_dup(pageUrl) : NULL;
@@ -1013,9 +1014,12 @@ void StyleEngine::parse (DilloHtml *html, DilloUrl *url, const char *buf,
       return;
    }
 
+   unsigned queries = CssParser::getColorSchemeQueries ();
    importDepth++;
    CssParser::parse (html, url, cssContext, buf, buflen, origin);
    importDepth--;
+   if (CssParser::getColorSchemeQueries () != queries)
+      colorSchemeSensitive = true;
 }
 
 /**
@@ -1090,7 +1094,10 @@ void StyleEngine::buildUserStyle () {
    char *filename = dStrconcat(dGethomedir(), "/.dillo/style.css", NULL);
 
    if ((style = a_Misc_file2dstr(filename))) {
+      unsigned queries = CssParser::getColorSchemeQueries ();
       CssParser::parse (NULL,NULL,cssContext,style->str, style->len,CSS_ORIGIN_USER);
+      if (CssParser::getColorSchemeQueries () != queries)
+         colorSchemeSensitive = true;
       dStr_free (style, 1);
    }
    dFree (filename);

@@ -40,6 +40,7 @@
 #include "html_common.hh"
 #include "form.hh"
 #include "table.hh"
+#include "cssparser.hh"
 
 #include "dw/textblock.hh"
 #include "dw/bullet.hh"
@@ -289,6 +290,17 @@ void a_Html_form_display_hiddens(void *v_html, void *v_form, bool_t display)
 /*
  * Control-socket introspection (see html.hh for the contract).
  */
+
+/**
+ * Whether this page's styling depends on prefers-color-scheme.
+ */
+int a_Html_color_scheme_sensitive(void *v_html)
+{
+   DilloHtml *html = (DilloHtml*)v_html;
+
+   return html && html->styleEngine &&
+          html->styleEngine->isColorSchemeSensitive();
+}
 
 int a_Html_link_count(void *v_html)
 {
@@ -1795,6 +1807,30 @@ static void Html_tag_close_script(DilloHtml *html)
 }
 
 /**
+ * Whether a media attribute on <style> or <link> selects this stylesheet.
+ * Media queries Dillo can decide (media types, prefers-color-scheme) are
+ * honoured; for ones it cannot (widths, ...) keep the historical rule of
+ * loading anything that mentions "screen" or is "all".
+ */
+static bool Html_media_attr_matches(DilloHtml *html, const char *media)
+{
+   unsigned queries = CssParser::getColorSchemeQueries();
+   CssParser::MediaMatch match = CssParser::matchMedia(media);
+
+   if (CssParser::getColorSchemeQueries() != queries)
+      html->styleEngine->setColorSchemeSensitive();
+
+   switch (match) {
+   case CssParser::MEDIA_TRUE:
+      return true;
+   case CssParser::MEDIA_FALSE:
+      return false;
+   default:
+      return !dStrAsciiCasecmp(media, "all") || dStriAsciiStr(media, "screen");
+   }
+}
+
+/**
  * Handle open STYLE.
  * Store contents in the stash where the style sheet interpreter can get it.
  */
@@ -1811,12 +1847,7 @@ static void Html_tag_open_style(DilloHtml *html, const char *tag, int tagsize)
       html->loadCssFromStash = false;
    }
    if ((attrbuf = a_Html_get_attr(html, tag, tagsize, "media")) &&
-       dStrAsciiCasecmp(attrbuf, "all") && !dStriAsciiStr(attrbuf, "screen")) {
-      /* HTML 4.01 sec. 6.13 says that media descriptors are case-sensitive,
-       * but sec. 14.2.3 says that the attribute is case-insensitive.
-       * TODO can be a comma-separated list.
-       * TODO handheld.
-       */
+       !Html_media_attr_matches(html, attrbuf)) {
       html->loadCssFromStash = false;
    }
 
@@ -3398,7 +3429,7 @@ static void Html_tag_open_link(DilloHtml *html, const char *tag, int tagsize)
    if (((attrbuf = a_Html_get_attr(html, tag, tagsize, "type")) &&
         dStrAsciiCasecmp(attrbuf, "text/css")) ||
        ((attrbuf = a_Html_get_attr(html, tag, tagsize, "media")) &&
-        !dStriAsciiStr(attrbuf, "screen") && dStrAsciiCasecmp(attrbuf, "all")))
+        !Html_media_attr_matches(html, attrbuf)))
       return;
 
    if (!(attrbuf = a_Html_get_attr(html, tag, tagsize, "href")) ||
