@@ -218,9 +218,9 @@ jobs:
         make
         make check
       shell: alpine.sh {0}
-  macOS-14-openssl-1-1:
+  macOS-15-openssl-1-1:
     needs: ubuntu-latest-html-tests
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
     - uses: actions/checkout@v1
       with:
@@ -245,15 +245,15 @@ jobs:
         export LDFLAGS="-L$(brew --prefix openssl@1.1)/lib"
         export CPPFLAGS="-I$(brew --prefix openssl@1.1)/include"
         make distcheck
-  macOS-14-openssl-3:
+  macOS-15-openssl-3:
     needs: ubuntu-latest-html-tests
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
     - uses: actions/checkout@v1
       with:
         fetch-depth: 1
     - name: Remove old OpenSSL 1.1
-      run: brew uninstall openssl@1.1
+      run: brew uninstall openssl@1.1 || true   # not on every runner image
     - name: Install dependencies
       run: brew install autoconf automake fltk@1.3 openssl@3
     - name: autogen
