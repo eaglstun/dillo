@@ -293,7 +293,9 @@ jobs:
           pwd
           freebsd-version
           ./autogen.sh
-          ./configure CPPFLAGS='-I/usr/local/include' LDFLAGS='-L/usr/local/lib'
+          # FreeBSD ports only ship FLTK 1.4 now (no 1.3 port left), which
+          # Dillo supports as experimental.
+          ./configure CPPFLAGS='-I/usr/local/include' LDFLAGS='-L/usr/local/lib' --enable-experimental-fltk
           cat config.log
           make
           make check
