@@ -183,6 +183,13 @@ dillo_SOURCES += \
 	macosappearance.mm
 endif
 
+# Automake links a program with the Objective-C++ driver whenever .mm
+# sources can be part of it, even when the MACOS_APP conditional leaves them
+# out. That rule uses OBJCXXFLAGS and drops CXXFLAGS, so e.g.
+# CXXFLAGS=-fsanitize=address compiled fine but failed to link on Linux.
+# The C++ link rule works for the Objective-C++ objects on macOS too.
+dillo_LINK = $(CXXLINK)
+
 # https://www.gnu.org/software/automake/manual/html_node/Built-Sources-Example.html
 nodist_dillo_SOURCES = commit.h
 version.$(OBJEXT) dillo.$(OBJEXT): commit.h

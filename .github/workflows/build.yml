@@ -34,19 +34,35 @@ jobs:
     - name: make check
       run: |
         export DILLOBINDIR=$(readlink -f install/bin)
+        export DILLO_KEEP_WORKDIR=1
         cd build && make check || (cat test/html/test-suite.log; false)
         export DILLOBINDIR=
-    - name: Check release fits in a floppy disk of 1.44 MB
+    - name: Upload HTML test renders on failure
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: html-test-renders
+        path: |
+          build/test/html/**/*.workdir/
+          build/test/html/**/*.log
+        if-no-files-found: ignore
+    # Upstream Dillo's release fits on a 1.44 MB floppy. This fork bundles
+    # DejaVu fonts for macOS (~3 MB) plus Mac/iOS assets, so it keeps its own
+    # limit, still low enough to catch accidental bloat. The floppy figure is
+    # printed for comparison.
+    - name: Check release size (fork limit 5 MB)
       run: |
         cd build
         make dist-gzip
         size=$(stat -c %s dillo-*.tar.gz)
         floppy=$((1474560 - 32*1024)) # Leave room for FAT table
-        echo "Floppy occupation: $(($size * 100 / $floppy)) %"
-        if [ $size -lt $floppy ]; then
-          echo 'OK: Fits in floopy disk'
+        limit=$((5 * 1024 * 1024))
+        echo "Floppy occupation: $(($size * 100 / $floppy)) % (upstream's limit)"
+        echo "Fork limit occupation: $(($size * 100 / $limit)) %"
+        if [ $size -lt $limit ]; then
+          echo "OK: $size bytes, under the fork's $limit-byte limit"
         else
-          echo "FAIL: Release size too big: $size / $floppy"
+          echo "FAIL: Release size too big: $size / $limit"
           exit 1
         fi
     - name: make distcheck (with HTML tests)
@@ -182,6 +198,11 @@ jobs:
     - uses: actions/checkout@v4
     - uses: jirutka/setup-alpine@v1
       with:
+        # Alpine v3.24 moved to mbedTLS 4.x (crypto split out into TF-PSA-Crypto,
+        # no mbedtls_pk_get_name), which Dillo's TLS layer does not support yet.
+        # v3.23 is the last stable release shipping mbedTLS 3.6, which this job
+        # is named for.
+        branch: v3.23
         packages: >
           build-base
           autoconf
@@ -197,9 +218,9 @@ jobs:
         make
         make check
       shell: alpine.sh {0}
-  macOS-14-openssl-1-1:
+  macOS-15-openssl-1-1:
     needs: ubuntu-latest-html-tests
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
     - uses: actions/checkout@v1
       with:
@@ -224,15 +245,15 @@ jobs:
         export LDFLAGS="-L$(brew --prefix openssl@1.1)/lib"
         export CPPFLAGS="-I$(brew --prefix openssl@1.1)/include"
         make distcheck
-  macOS-14-openssl-3:
+  macOS-15-openssl-3:
     needs: ubuntu-latest-html-tests
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
     - uses: actions/checkout@v1
       with:
         fetch-depth: 1
     - name: Remove old OpenSSL 1.1
-      run: brew uninstall openssl@1.1
+      run: brew uninstall openssl@1.1 || true   # not on every runner image
     - name: Install dependencies
       run: brew install autoconf automake fltk@1.3 openssl@3
     - name: autogen
@@ -272,7 +293,9 @@ jobs:
           pwd
           freebsd-version
           ./autogen.sh
-          ./configure CPPFLAGS='-I/usr/local/include' LDFLAGS='-L/usr/local/lib'
+          # FreeBSD ports only ship FLTK 1.4 now (no 1.3 port left), which
+          # Dillo supports as experimental.
+          ./configure CPPFLAGS='-I/usr/local/include' LDFLAGS='-L/usr/local/lib' --enable-experimental-fltk
           cat config.log
           make
           make check

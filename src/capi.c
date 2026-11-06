@@ -440,13 +440,19 @@ int a_Capi_open_url(DilloWeb *web, CA_Callback_t Call, void *CbData)
                }
             }
             if (dStrAsciiCasecmp(scheme, "file") == 0 &&
+                (web->flags & WEB_RootUrl) &&
                 !(URL_FLAGS(web->url) & URL_ReloadFromCache)) {
                /* A local file can change under us, and the file dpi sends no
                 * Last-Modified, so there is nothing to revalidate against:
-                * always re-read from disk. Re-reading a local file is cheap
-                * and there is no server to burden. A repush is exempt: it
-                * deliberately renders content injected into the cache (this
-                * is how "dilloc load" works). */
+                * always re-read the page from disk. Re-reading a local file
+                * is cheap and there is no server to burden. A repush is
+                * exempt: it deliberately renders content injected into the
+                * cache (this is how "dilloc load" works).
+                *
+                * Only the page itself, never its images or stylesheets: the
+                * reload below starts by aborting every connection for this
+                * URL, so a page using one image five times would cancel its
+                * own fetches and end up with only the last copy loaded. */
                a_Url_set_flags(web->url, URL_FLAGS(web->url) | URL_E2EQuery);
                reload = 1;
             }
