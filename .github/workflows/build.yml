@@ -46,17 +46,23 @@ jobs:
           build/test/html/**/*.workdir/
           build/test/html/**/*.log
         if-no-files-found: ignore
-    - name: Check release fits in a floppy disk of 1.44 MB
+    # Upstream Dillo's release fits on a 1.44 MB floppy. This fork bundles
+    # DejaVu fonts for macOS (~3 MB) plus Mac/iOS assets, so it keeps its own
+    # limit, still low enough to catch accidental bloat. The floppy figure is
+    # printed for comparison.
+    - name: Check release size (fork limit 5 MB)
       run: |
         cd build
         make dist-gzip
         size=$(stat -c %s dillo-*.tar.gz)
         floppy=$((1474560 - 32*1024)) # Leave room for FAT table
-        echo "Floppy occupation: $(($size * 100 / $floppy)) %"
-        if [ $size -lt $floppy ]; then
-          echo 'OK: Fits in floopy disk'
+        limit=$((5 * 1024 * 1024))
+        echo "Floppy occupation: $(($size * 100 / $floppy)) % (upstream's limit)"
+        echo "Fork limit occupation: $(($size * 100 / $limit)) %"
+        if [ $size -lt $limit ]; then
+          echo "OK: $size bytes, under the fork's $limit-byte limit"
         else
-          echo "FAIL: Release size too big: $size / $floppy"
+          echo "FAIL: Release size too big: $size / $limit"
           exit 1
         fi
     - name: make distcheck (with HTML tests)
