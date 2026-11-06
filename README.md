@@ -7,14 +7,19 @@ privacy. It is built with the [FLTK 1.3 GUI toolkit](http://fltk.org).
 **This fork adds two things upstream doesn't have:** a macOS build that
 behaves like a Mac application instead of an X11 program in a costume, and
 **an iOS port** — Dillo's real rendering engine and HTML/CSS parser running
-on a phone with no FLTK linked in at all.
+on a phone with no FLTK linked in at all. Along the way it picked up a few
+cross-platform additions: persistent history, some CSS fixes, and a much
+more capable `dilloc` control socket.
 
 <img src="ios/browser-wikipedia.png" alt="Dillo rendering Wikipedia on iOS" width="300">
 
-Everything is additive. The Linux/BSD build is untouched: every macOS
-behaviour below is behind `#ifdef __APPLE__`, the iOS port lives entirely in
-`ios/`, and the engine and parser have needed **zero source modifications**
-to run there.
+The Apple work is additive. Every macOS behaviour below is behind
+`#ifdef __APPLE__`, the iOS port lives entirely in `ios/`, and the engine and
+parser have needed **zero source modifications** to run there. The
+[browser features](#browser-features) and
+[automation verbs](#scripting-and-automation) are not platform-gated, so
+Linux/BSD builds get them too, and `configure` now runs its Objective-C++
+probe on every host (the compiler is only used on macOS).
 
 ## What's in the fork
 
@@ -53,6 +58,9 @@ with screenshots.
 
 - **System menu bar** (`Fl_Sys_Menu_Bar`) with File and Help menus; the
   in-window File and `?` buttons are hidden.
+- **Native address field** — the location bar is an AppKit `NSTextField`
+  laid over the FLTK toolbar and kept in sync with it, so it gets the
+  system's text editing, focus ring, and placeholder.
 - **Native context menus** — page, link, image, and form right-clicks are
   presented as AppKit `NSMenu`s, translated from the existing
   `Fl_Menu_Item` hierarchy so the callbacks stay shared with every other
