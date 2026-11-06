@@ -12,6 +12,8 @@
 #include "src/prefs.h"
 
 #include <assert.h>
+#include <fcntl.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -48,10 +50,15 @@ static DilloUrl *add(const char *urlstr, const char *title)
 
 int main(void)
 {
-   char path[] = "/tmp/dillo-history-test-XXXXXX";
+   char path[64];
    DilloUrl *one, *two, *three, *local;
    struct stat st;
-   int fd = mkstemp(path);
+   int fd;
+
+   /* Not mkstemp(): CI builds with -std=c99 -D_POSIX_C_SOURCE=200112L, where
+    * glibc does not declare it. O_EXCL gives the same exclusive create. */
+   snprintf(path, sizeof(path), "/tmp/dillo-history-test-%ld", (long)getpid());
+   fd = open(path, O_RDWR | O_CREAT | O_EXCL, 0600);
 
    assert(fd >= 0);
    close(fd);
