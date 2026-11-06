@@ -14,6 +14,13 @@ struct Fl_Menu_Item;
  */
 const Fl_Menu_Item *a_Mac_context_menu_popup(const Fl_Menu_Item *menu);
 
+/**
+ * Same, but drop the menu at (x, y) in fl_window's coordinates, e.g. just
+ * below a toolbar button, the way native toolbar menus open.
+ */
+const Fl_Menu_Item *a_Mac_context_menu_popup_at(const Fl_Menu_Item *menu,
+                                                void *fl_window, int x, int y);
+
 #endif /* __APPLE__ */
 
 #endif /* __MACOS_CONTEXT_MENU_HH__ */

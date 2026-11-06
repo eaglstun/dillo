@@ -10,10 +10,12 @@
 #import <AppKit/AppKit.h>
 
 #include <FL/Fl_Menu_Item.H>
+#include <FL/Fl_Window.H>
 
 #include <string>
 
 #include "macoscontextmenu.hh"
+#include "macosnative_tabs.hh"
 
 @interface DilloContextMenuTarget : NSObject
 @property(nonatomic, assign) const Fl_Menu_Item *selectedItem;
@@ -81,7 +83,12 @@ static void addMenuItems(NSMenu *nativeMenu, const Fl_Menu_Item *items,
    }
 }
 
-const Fl_Menu_Item *a_Mac_context_menu_popup(const Fl_Menu_Item *menu)
+/*
+ * Build the native menu, show it at location in view (screen coordinates
+ * when view is nil), and return the chosen original item.
+ */
+static const Fl_Menu_Item *popupAt(const Fl_Menu_Item *menu, NSPoint location,
+                                   NSView *view)
 {
    if (!menu)
       return NULL;
@@ -93,9 +100,28 @@ const Fl_Menu_Item *a_Mac_context_menu_popup(const Fl_Menu_Item *menu)
 
    /* Dillo deliberately opens its popup from a zero-delay timeout, after
     * the originating mouse event has unwound. This API needs no retained
-    * NSEvent and accepts screen coordinates when the view is nil. */
-   [nativeMenu popUpMenuPositioningItem:nil
-                             atLocation:[NSEvent mouseLocation]
-                                 inView:nil];
+    * NSEvent. */
+   [nativeMenu popUpMenuPositioningItem:nil atLocation:location inView:view];
    return target.selectedItem;
+}
+
+const Fl_Menu_Item *a_Mac_context_menu_popup(const Fl_Menu_Item *menu)
+{
+   return popupAt (menu, [NSEvent mouseLocation], nil);
+}
+
+const Fl_Menu_Item *a_Mac_context_menu_popup_at(const Fl_Menu_Item *menu,
+                                                void *fl_window, int x, int y)
+{
+   Fl_Window *window = static_cast<Fl_Window *>(fl_window);
+   NSWindow *nativeWindow = (window && window->shown ())
+      ? (__bridge NSWindow *)a_Mac_tabs_native_window (window) : nil;
+   NSView *contentView = nativeWindow.contentView;
+
+   if (!contentView)
+      return a_Mac_context_menu_popup (menu);
+
+   /* FLTK window coordinates grow downward; the content view's upward. */
+   NSPoint location = NSMakePoint (x, NSHeight (contentView.bounds) - y);
+   return popupAt (menu, location, contentView);
 }

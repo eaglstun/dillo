@@ -550,21 +550,23 @@ void UI::make_location(int ww)
 }
 
 /**
- * Create the progress bars
+ * Create the progress boxes (image count and page size). They sit in the
+ * status bar, between the status text and the bug meter, one line each.
  */
-void UI::make_progress_bars(int wide, int thin_up)
+void UI::make_progress_bars(int x, int y, int h)
 {
+    const int iw = 110, ppw = 95;
+
     // Images
-    IProg = new CustProgressBox(p_xpos,p_ypos,pw,bh);
+    IProg = new CustProgressBox(x,y,iw,h);
     IProg->labelsize(12);
-    IProg->box(thin_up ? FL_THIN_UP_BOX : FL_EMBOSSED_BOX);
-    IProg->update_label(wide ? "Images\n0 of 0" : "0 of 0");
-    p_xpos += pw;
+    IProg->box(FL_THIN_DOWN_BOX);
+    IProg->update_label("Images: 0 of 0");
     // Page
-    PProg = new CustProgressBox(p_xpos,p_ypos,pw,bh);
+    PProg = new CustProgressBox(x+iw,y,ppw,h);
     PProg->labelsize(12);
-    PProg->box(thin_up ? FL_THIN_UP_BOX : FL_EMBOSSED_BOX);
-    PProg->update_label(wide ? "Page\n0.0 KB" : "0.0 KB");
+    PProg->box(FL_THIN_DOWN_BOX);
+    PProg->update_label("Page: 0.0 KB");
 }
 
 /**
@@ -614,7 +616,6 @@ void UI::make_panel(int ww)
    else
       icons = &standard_icons;
 
-   pw = 70;
    p_xpos = p_ypos = 0;
    if (PanelSize == P_tiny) {
       if (Small_Icons)
@@ -643,7 +644,6 @@ void UI::make_panel(int ww)
        make_filemenu_button();
        make_location(ww);
        NavBar->resizable(LocationGroup);
-       make_progress_bars(0,1);
       NavBar->box(FL_THIN_UP_FRAME);
       NavBar->end();
       NavBar->rearrange();
@@ -667,15 +667,9 @@ void UI::make_panel(int ww)
        NavBar->box(FL_NO_BOX);
        NavBar->begin();
         make_toolbar(ww,bh);
-        w = new Fl_Box(p_xpos,0,ww-p_xpos-2*pw,bh);
+        w = new Fl_Box(p_xpos,0,ww-p_xpos,bh);
         w->box(FL_FLAT_BOX);
         NavBar->resizable(w);
-        p_xpos = ww - 2*pw;
-        if (PanelSize == P_small) {
-           make_progress_bars(0,0);
-        } else {
-           make_progress_bars(1,0);
-        }
        NavBar->end();
        NavBar->rearrange();
        TopGroup->insert(*NavBar,1);
@@ -692,12 +686,15 @@ void UI::make_status_bar(int ww, int wh)
    StatusBar->box(FL_NO_BOX);
 
     // Status box
-    StatusOutput = new Fl_Output(0, wh-sh, ww-bm_w, sh);
+    StatusOutput = new Fl_Output(0, wh-sh, ww-bm_w-205, sh);
     StatusOutput->value("https://dillo-browser.org/");
     StatusOutput->labelsize(8);
     StatusOutput->box(FL_THIN_DOWN_BOX);
     StatusOutput->clear_visible_focus();
     StatusOutput->color(FL_BACKGROUND_COLOR);
+
+    // Image and page progress, beside the bug meter
+    make_progress_bars(StatusOutput->w(), wh-sh, sh);
 
     // Bug Meter
     BugMeter = new CustButton(ww-bm_w,wh-sh,bm_w,sh);
@@ -1049,8 +1046,7 @@ void UI::set_page_prog(size_t nbytes, int cmd)
             prefix = 'K';
             magnitude = nbytes / 1024.0;
          }
-         snprintf(str, 32, "%s%.1f %cB",
-                  (PanelSize == 0) ? "" : "Page\n", magnitude, prefix);
+         snprintf(str, 32, "Page: %.1f %cB", magnitude, prefix);
       } else if (cmd == 2) {
          str[0] = '\0';
       }
@@ -1071,8 +1067,7 @@ void UI::set_img_prog(int n_img, int t_img, int cmd)
    } else {
       IProg->activate();
       if (cmd == 1) {
-         snprintf(str, 32, "%s%d of %d",
-                  (PanelSize == 0) ? "" : "Images\n", n_img, t_img);
+         snprintf(str, 32, "Images: %d of %d", n_img, t_img);
       } else if (cmd == 2) {
          str[0] = '\0';
       }
@@ -1142,6 +1137,8 @@ void UI::customize()
       PProg->hide();
    }
 
+   if (StatusBar)
+      StatusBar->rearrange();
    if (NavBar)
       NavBar->rearrange();
    if (LocBar)

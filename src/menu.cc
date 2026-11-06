@@ -337,7 +337,15 @@ static void Menu_simple_popup_cb(void *data)
 
    ((UI*)popup_bw->ui)->window()->cursor(FL_CURSOR_DEFAULT);
 
+#ifdef __APPLE__
+   /* popup_x/y are window coordinates: below a toolbar button for File and
+    * history, or the click point for the bug meter. */
+   m = a_Mac_context_menu_popup_at((Fl_Menu_Item *)data,
+                                   ((UI*)popup_bw->ui)->window(),
+                                   popup_x, popup_y);
+#else
    m = ((Fl_Menu_Item *)data)->popup(popup_x, popup_y);
+#endif
 
    if (m && m->callback())
       m->do_callback((Fl_Widget *)data);
@@ -941,7 +949,11 @@ void a_Menu_tools_popup(BrowserWindow *bw, int x, int y)
 #endif
    cur_smallicons ? pm[9].set() : pm[9].clear();
 
+#ifdef __APPLE__
+   item = a_Mac_context_menu_popup_at(pm, ui->window(), x, y);
+#else
    item = pm->popup(x, y);
+#endif
    if (item) {
       ((Fl_Widget *)item)->do_callback();
    }
