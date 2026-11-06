@@ -68,6 +68,23 @@ window and explicitly attach it to the source window's group. Keep the native
 group removal ahead of deleting the corresponding `Fl_Window`, or closing one tab
 can tear down the whole group.
 
+**Native scrollbars.** On macOS the page viewport's scrollbars are a transparent
+`NSScrollView` laid over `FltkViewport` (`src/macosscrollers.mm`), with an empty
+page-sized document view; FLTK still draws the page and the FLTK scrollbars stay hidden.
+It answers hit tests only over its scrollers, so wheel, selection, and links fall through
+to FLTK. `dw/` sees AppKit only through `FltkNativeScrollbarHooks`, installed by
+`a_Mac_scrollers_init()` before any window exists. Things that look wrong but are not:
+- Overlay scrollers reserve 0px, so `Layout` always passes thickness 0 and would treat
+  that as "no scrollbar" and jump to the top. `FltkViewport` keeps its own
+  `hsVisible`/`vsVisible` and decides from the canvas size in overlay mode.
+- A bare `NSScroller` in overlay style never becomes visible (the owning scroll view
+  animates the knob). That is why this is a whole `NSScrollView`.
+- AppKit animates track clicks through fractional origins; `scroller_sync()` ignores
+  sub-pixel differences, or the echo of FLTK's rounding cancels the animation.
+- Scroller appearance follows the page background, not the system: a light page in
+  Dark Mode gets light scrollers. The gutters are painted with the page colour because
+  the dark track is translucent.
+
 **Help menu.** Entries deep-link into `doc/user_help.in.html` by anchor — each item's
 `user_data` is the anchor id, and `a_UIcmd_open_help(bw, fragment)` appends it. Adding
 a section means adding an `id="..."` there and a menu entry here; nothing else knows

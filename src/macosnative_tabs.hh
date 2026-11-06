@@ -2,6 +2,8 @@
 #define __MACOSNATIVE_TABS_HH__
 
 void a_Mac_tabs_configure(void *fl_window);
+/* The NSWindow for an Fl_Window, stable across AppKit tab grouping. */
+void *a_Mac_tabs_native_window(void *fl_window);
 void a_Mac_tabs_add(void *source_fl_window, void *new_fl_window, int focus);
 void a_Mac_tabs_remove(void *fl_window);
 void a_Mac_tabs_select_relative(void *fl_window, int direction);
