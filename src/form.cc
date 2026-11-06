@@ -759,6 +759,7 @@ void Html_tag_open_input(DilloHtml *html, const char *tag, int tagsize)
       DilloHtmlInput *input = Html_get_radio_input(html, name);
       if (input && input->getResource())
          rb_r = (RadioButtonResource*) input->getResource();
+      /* rb_r may be NULL if it is the first element in the group */
       resource = factory->createRadioButtonResource(rb_r, false);
       init_val = (a_Html_get_attr(html, tag, tagsize, "checked") != NULL);
       init_str = value;
@@ -776,8 +777,18 @@ void Html_tag_open_input(DilloHtml *html, const char *tag, int tagsize)
       init_str = (value) ? value : dStrdup("Reset");
       resource = factory->createLabelButtonResource(init_str);
    } else if (!dStrAsciiCasecmp(type, "image")) {
-      if (URL_FLAGS(html->base_url) & URL_SpamSafe ||
-            !a_Html_should_display(html)) {
+      int skip_image = URL_FLAGS(html->base_url) & URL_SpamSafe ||
+         !a_Html_should_display(html);
+      if (!skip_image) {
+         /* Skip image if src is missing or is malformed */
+         DilloUrl *url = NULL;
+         if (!(attrbuf = a_Html_get_attr(html, tag, tagsize, "src")) ||
+               !(url = a_Html_url_new(html, attrbuf, NULL, 0))) {
+            skip_image = 1;
+         }
+         a_Url_free(url);
+      }
+      if (skip_image) {
          /* Don't request the image; make a text submit button instead */
          inp_type = DILLO_HTML_INPUT_SUBMIT;
          attrbuf = a_Html_get_attr(html, tag, tagsize, "alt");
@@ -788,6 +799,7 @@ void Html_tag_open_input(DilloHtml *html, const char *tag, int tagsize)
          inp_type = DILLO_HTML_INPUT_IMAGE;
          /* use a dw_image widget */
          embed = Html_input_image(html, tag, tagsize);
+         assert(embed);
          owns_embed = false; /* adds it to the tree */
          init_str = value;
       }
@@ -814,10 +826,10 @@ void Html_tag_open_input(DilloHtml *html, const char *tag, int tagsize)
       }
    } else if (!dStrAsciiCasecmp(type, "button")) {
       inp_type = DILLO_HTML_INPUT_BUTTON;
-      if (value) {
-         init_str = value;
-         resource = factory->createLabelButtonResource(init_str);
-      }
+      if (value == NULL)
+         value = dStrdup("");
+      init_str = value;
+      resource = factory->createLabelButtonResource(init_str);
    } else {
       /* Text input, which also is the default */
       inp_type = DILLO_HTML_INPUT_TEXT;
@@ -830,8 +842,10 @@ void Html_tag_open_input(DilloHtml *html, const char *tag, int tagsize)
 
    if (inp_type != DILLO_HTML_INPUT_UNKNOWN) {
 
-      if (!embed)
+      if (!embed) {
+         assert(resource);
          embed = new Embed(resource);
+      }
 
       assert(embed);
 

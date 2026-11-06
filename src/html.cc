@@ -3631,13 +3631,13 @@ static const TagInfo Tags[] = {
  {"sub", B8(01011),'R', Html_tag_open_default, NULL, NULL},
  {"sup", B8(01011),'R', Html_tag_open_default, NULL, NULL},
  {"table", B8(01100),'R', Html_tag_open_table, Html_tag_content_table, NULL},
- {"tbody", B8(01010),'O', Html_tag_open_tbody, Html_tag_content_tbody, NULL},
+ {"tbody", B8(01010),'O', Html_tag_open_default, NULL, NULL},
  {"td", B8(01110),'O', Html_tag_open_td, Html_tag_content_td, NULL},
  {"textarea", B8(01011),'R', Html_tag_open_textarea, Html_tag_content_textarea,
                              Html_tag_close_textarea},
- {"tfoot", B8(01010),'O', Html_tag_open_tfoot, NULL, NULL},
+ {"tfoot", B8(01010),'O', Html_tag_open_default, NULL, NULL},
  {"th", B8(01110),'O', Html_tag_open_th, Html_tag_content_th, NULL},
- {"thead", B8(01010),'O', Html_tag_open_thead, NULL, NULL},
+ {"thead", B8(01010),'O', Html_tag_open_default, NULL, NULL},
  {"title", B8(10011),'R', Html_tag_open_title, NULL, Html_tag_close_title},
  {"tr", B8(01100),'O', Html_tag_open_tr, Html_tag_content_tr, NULL},
  {"tt", B8(01011),'R', Html_tag_open_default, NULL, NULL},
@@ -3885,7 +3885,7 @@ static void Html_tag_cleanup_at_close(DilloHtml *html, int new_idx)
          /* Let these elements close anything left open inside them */
          continue;
       } else if (Tags[new_idx].Flags & 4 &&   // Block container
-                 Tags[stack_idx].Flags & 3) { // Inline element or container
+                 Tags[new_idx].Flags & 3) { // Inline element or container
          /* Let a block container close inline elements left open inside it. */
          continue;
       } else {
