@@ -101,6 +101,9 @@ public:
     */
    void draw (CGContextRef cg, int xRoot, int yRoot,
               int x, int y, int width, int height);
+
+private:
+   CGImageRef createCGImage (int x, int y, int width, int height);
 };
 
 } // namespace apple

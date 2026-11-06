@@ -64,6 +64,7 @@
 @property (nonatomic, assign) DilloWeb *web;
 @property (nonatomic, assign) int clientKey;
 @property (nonatomic, strong) NSURLSessionDataTask *task;
+@property (nonatomic, strong) NSData *cachedData;   // served from _imageBytes
 @end
 @implementation PendingImage
 @end
@@ -104,6 +105,16 @@
    NSString *_currentURLString;
    NSURLSession *_imageSession;
    NSMutableDictionary<NSNumber *, PendingImage *> *_pendingImages;
+   /* Downloaded image bytes for the current page, by URL. A zoom re-parses
+    * the page (see applyZoom), which re-requests every image; serving them
+    * from here avoids re-downloading and a flash of placeholders. Cleared
+    * on navigation (clearCache), kept across zoom re-parses. */
+   NSMutableDictionary<NSString *, NSData *> *_imageBytes;
+   /* Cached images requested while loadHTML is parsing. They can't be
+    * delivered inside a_Capi_open_url (the caller registers the client only
+    * after it returns), so loadHTML delivers them before it returns. */
+   NSMutableArray<PendingImage *> *_cachedDeliveries;
+   BOOL _parsing;
    dw::core::ui::ResourceFactory *_formFactory;
    UIView *_formHost;
    std::string _selectedFilePath;   // storage backing a_UIcmd_select_file
@@ -264,6 +275,8 @@ static void initDilloOnce (void)
       [NSURLSession sessionWithConfiguration:
                        [NSURLSessionConfiguration defaultSessionConfiguration]];
    _pendingImages = [NSMutableDictionary dictionary];
+   _imageBytes = [NSMutableDictionary dictionary];
+   _cachedDeliveries = [NSMutableArray array];
 
    _layout->viewportSizeChanged (_view, width, height);
 
@@ -335,6 +348,22 @@ static void initDilloOnce (void)
    PendingImage *pending = [PendingImage new];
    pending.web = web;
    pending.clientKey = clientKey;
+
+   NSData *cached = _imageBytes[urlString];
+   if (cached) {
+      pending.cachedData = cached;
+      [_cachedDeliveries addObject:pending];
+      if (!_parsing) {
+         /* Requested outside a parse (e.g. during a later layout): deliver
+          * on the next turn, after the caller has registered the client. */
+         __weak DilloBridge *weakSelf = self;
+         dispatch_async (dispatch_get_main_queue (), ^{
+            [weakSelf deliverCachedImages];
+         });
+      }
+      return;
+   }
+
    NSNumber *key = @(clientKey);
    _pendingImages[key] = pending;
 
@@ -353,17 +382,34 @@ static void initDilloOnce (void)
             return;
          [self->_pendingImages removeObjectForKey:key];
 
-         if (error || !data || data.length == 0)
+         if (error || !data || data.length == 0) {
             dw::ios::abortImageWeb (p.web, p.clientKey);
-         else
+         } else {
+            self->_imageBytes[urlString] = data;
             dw::ios::deliverImageData (p.web, p.clientKey,
                                        data.bytes, (int) data.length);
+         }
          self->_platform->runIdles ();
          if (self.onInvalidate)
             self.onInvalidate ();
       });
    }];
    [pending.task resume];
+}
+
+/* Deliver images served from _imageBytes; see _cachedDeliveries. */
+- (void)deliverCachedImages
+{
+   if (_cachedDeliveries.count == 0)
+      return;
+   NSArray<PendingImage *> *batch = [_cachedDeliveries copy];
+   [_cachedDeliveries removeAllObjects];
+   for (PendingImage *p in batch)
+      dw::ios::deliverImageData (p.web, p.clientKey, p.cachedData.bytes,
+                                 (int) p.cachedData.length);
+   _platform->runIdles ();
+   if (self.onInvalidate)
+      self.onInvalidate ();
 }
 
 - (void)cancelPendingImages
@@ -374,6 +420,10 @@ static void initDilloOnce (void)
       dw::ios::cancelImageWeb (p.web, p.clientKey);
    }
    [_pendingImages removeAllObjects];
+   /* Undelivered cached images belong to the page being left too. */
+   for (PendingImage *p in _cachedDeliveries)
+      dw::ios::cancelImageWeb (p.web, p.clientKey);
+   [_cachedDeliveries removeAllObjects];
 }
 
 - (void)setFormHost:(UIView *)host
@@ -415,6 +465,7 @@ static void initDilloOnce (void)
 - (void)clearCache
 {
    dw::ios::cacheClear ();
+   [_imageBytes removeAllObjects];
 }
 
 - (void)seedCSS:(NSString *)cssText forURL:(NSString *)url
@@ -461,8 +512,10 @@ static void initDilloOnce (void)
    /* The parser tokenizes the buffer IN PLACE and retains the pointer
     * (Start_Buf), so it needs writable heap memory that outlives it. */
    _pageBuf = dStrdup ([html UTF8String]);
+   _parsing = YES;
    page->write (_pageBuf, strlen (_pageBuf), 1 /* Eof */);
    page->finishParsing (0 /* ClientKey; no cache client exists */);
+   _parsing = NO;
    _oldPageBuf = _pageBuf;   // becomes "previous" on the next load
    _pageBuf = NULL;
 
@@ -476,6 +529,10 @@ static void initDilloOnce (void)
       _layout->setAnchor (fragment);
 
    a_Url_free (url);
+
+   /* Images already downloaded for this page (zoom re-parse) go in now,
+    * before the next redraw, so they never show as placeholders. */
+   [self deliverCachedImages];
 
    _platform->runIdles ();
 

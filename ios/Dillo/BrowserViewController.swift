@@ -32,7 +32,7 @@ final class RenderView: UIView {
 /// The browser window: address bar + back/reload on top, engine canvas
 /// below, with a UIScrollView supplying native scrolling physics.
 final class BrowserViewController: UIViewController {
-    private var bridge: DilloBridge!
+    private(set) var bridge: DilloBridge!   // readable by DilloTests
     private var loader: PageLoader!
 
     private let addressField = UITextField()
@@ -42,7 +42,7 @@ final class BrowserViewController: UIViewController {
     private let spinner = UIActivityIndicatorView(style: .medium)
     private let titleLabel = UILabel()
     private let scrollView = UIScrollView()
-    private let renderView = RenderView(frame: .zero)
+    let renderView = RenderView(frame: .zero)   // internal for DilloTests
     private var contextMenuInfo: DilloContextInfo?
     private var isSelectingText = false
     private lazy var editMenuInteraction = UIEditMenuInteraction(
