@@ -176,7 +176,9 @@ dillo_SOURCES += \
 	macosnative_tabs.hh \
 	macosnative_tabs.mm \
 	macoscontextmenu.hh \
-	macoscontextmenu.mm
+	macoscontextmenu.mm \
+	macosscrollers.hh \
+	macosscrollers.mm
 endif
 
 # https://www.gnu.org/software/automake/manual/html_node/Built-Sources-Example.html

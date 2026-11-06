@@ -52,10 +52,60 @@ public:
    }
 };
 
+const FltkNativeScrollbarHooks *FltkViewport::nativeHooks = NULL;
+FltkViewport *FltkViewport::nativeViewports = NULL;
+
+void FltkViewport::setNativeScrollbarHooks (const FltkNativeScrollbarHooks
+                                            *hooks)
+{
+   /* Viewports created earlier keep their FLTK scrollbars. */
+   nativeHooks = hooks;
+}
+
+/*
+ * The platform switched scroller style (e.g. overlay <-> always shown):
+ * re-reserve space in every native viewport and let its layout reflow.
+ */
+void FltkViewport::nativeScrollbarStyleChanged ()
+{
+   if (!nativeHooks)
+      return;
+
+   int thickness = nativeHooks->thickness ();
+   for (FltkViewport *vp = nativeViewports; vp; vp = vp->nativeNext) {
+      if (vp->sbThickness == thickness) {
+         vp->syncNativeScrollbars (false);
+         continue;
+      }
+      vp->sbThickness = thickness;
+      vp->adjustScrollbarsAndGadgetsAllocation ();
+      if (vp->theLayout)
+         vp->theLayout->scrollbarThicknessChanged (vp);
+      vp->damage (FL_DAMAGE_ALL);
+   }
+}
+
 FltkViewport::FltkViewport (int X, int Y, int W, int H, const char *label):
    FltkWidgetView (X, Y, W, H, label)
 {
    DBG_OBJ_CREATE ("dw::fltk::FltkViewport");
+
+   hsVisible = vsVisible = false;
+   darkBg = false;
+   gutterColor = FL_WHITE;
+   scrollbarOnLeft = 0;
+   nativePrev = nativeNext = NULL;
+   nativeScroller = NULL;
+   if (nativeHooks) {
+      sbThickness = nativeHooks->thickness ();
+      nativeScroller = nativeHooks->create (this, nativeScrolledCb);
+      nativeNext = nativeViewports;
+      if (nativeNext)
+         nativeNext->nativePrev = this;
+      nativeViewports = this;
+   } else {
+      sbThickness = SCROLLBAR_THICKNESS;
+   }
 
    hscrollbar = new CustScrollbar (x (), y (), 1, 1);
    hscrollbar->type(FL_HORIZONTAL);
@@ -91,6 +141,15 @@ FltkViewport::FltkViewport (int X, int Y, int W, int H, const char *label):
 
 FltkViewport::~FltkViewport ()
 {
+   if (nativeHooks && nativeScroller) {
+      nativeHooks->destroy (nativeScroller);
+      if (nativePrev)
+         nativePrev->nativeNext = nativeNext;
+      else
+         nativeViewports = nativeNext;
+      if (nativeNext)
+         nativeNext->nativePrev = nativePrev;
+   }
    delete gadgets;
    DBG_OBJ_DELETE ();
 }
@@ -101,9 +160,9 @@ void FltkViewport::adjustScrollbarsAndGadgetsAllocation ()
    int visibility = 0;
 
    _MSG(" >>FltkViewport::adjustScrollbarsAndGadgetsAllocation\n");
-   if (hscrollbar->visible ())
+   if (hsVisible)
       visibility |= 1;
-   if (vscrollbar->visible ())
+   if (vsVisible)
       visibility |= 2;
 
    if (gadgets->size () > 0) {
@@ -119,8 +178,8 @@ void FltkViewport::adjustScrollbarsAndGadgetsAllocation ()
          break;
       }
    } else {
-      hdiff = vscrollbar->visible () ? SCROLLBAR_THICKNESS : 0;
-      vdiff = hscrollbar->visible () ? SCROLLBAR_THICKNESS : 0;
+      hdiff = vsVisible ? SCROLLBAR_THICKNESS : 0;
+      vdiff = hsVisible ? SCROLLBAR_THICKNESS : 0;
    }
 
    if (scrollbarOnLeft) {
@@ -161,8 +220,36 @@ void FltkViewport::adjustScrollbarsAndGadgetsAllocation ()
 
 void FltkViewport::adjustScrollbarValues ()
 {
+   if (nativeHooks && nativeScroller) {
+      /* The hidden FLTK scrollbars would only queue useless redraws. */
+      syncNativeScrollbars (false);
+      return;
+   }
    hscrollbar->value (scrollX, hscrollbar->w (), 0, canvasWidth);
    vscrollbar->value (scrollY, vscrollbar->h (), 0, canvasHeight);
+}
+
+/*
+ * Place the platform scrollers over this viewport and update their values.
+ * Called whenever geometry, canvas size, or scroll position may have
+ * changed; the platform side only touches what differs.
+ */
+void FltkViewport::syncNativeScrollbars (bool flash)
+{
+   if (!nativeHooks || !nativeScroller)
+      return;
+
+   Fl_Window *win = window ();
+   const int shown = win && win->shown () && visible_r ();
+
+   nativeHooks->sync (nativeScroller, win, x (), y (), w (), h (), shown,
+                      canvasWidth, canvasHeight, scrollX, scrollY,
+                      hsVisible, vsVisible, scrollbarOnLeft, flash, darkBg);
+}
+
+void FltkViewport::nativeScrolledCb (void *viewport, int x, int y)
+{
+   ((FltkViewport *)viewport)->scrollTo (x, y);
 }
 
 void FltkViewport::hscrollbarChanged ()
@@ -223,12 +310,14 @@ void FltkViewport::draw_area (void *data, int x, int y, int w, int h)
  */
 void FltkViewport::draw ()
 {
+   /* With native scrollers the FLTK ones stay hidden; vis_* is only the
+    * space reserved for the platform scroller (0 when it overlays). */
    const int d = damage(),
-             vis_vs = vscrollbar->visible () ? SCROLLBAR_THICKNESS : 0,
-             vis_hs = hscrollbar->visible () ? SCROLLBAR_THICKNESS : 0,
+             vis_vs = vsVisible ? sbThickness : 0,
+             vis_hs = hsVisible ? sbThickness : 0,
              draw = d & (FL_DAMAGE_ALL | FL_DAMAGE_EXPOSE),
-             draw_vs = vis_vs && vscrollbar->damage (),
-             draw_hs = vis_hs && hscrollbar->damage ();
+             draw_vs = vscrollbar->visible () && vscrollbar->damage (),
+             draw_hs = hscrollbar->visible () && hscrollbar->damage ();
 
    _MSG("FltkViewport::draw d=%d  =>  ", d);
    // scrollbars
@@ -236,7 +325,15 @@ void FltkViewport::draw ()
       draw_child (*vscrollbar);
    if (draw || draw_hs)
       draw_child (*hscrollbar);
-   if (draw && vis_vs && vis_hs) {
+   if (draw && nativeHooks && nativeScroller && (vis_vs || vis_hs)) {
+      /* Native scrollers are drawn over this strip, and their tracks can
+       * be translucent: give them the page colour to sit on, corner too. */
+      fl_color(gutterColor);
+      if (vis_vs)
+         fl_rectf(scrollbarOnLeft ? x() : x()+w()-vis_vs, y(), vis_vs, h());
+      if (vis_hs)
+         fl_rectf(x(), y()+h()-vis_hs, w(), vis_hs);
+   } else if (draw && vis_vs && vis_hs) {
       fl_color(FL_BACKGROUND_COLOR);
       if (scrollbarOnLeft) {
          fl_rectf(x(), y()+h()-vis_hs, vis_vs, vis_hs);
@@ -266,6 +363,21 @@ void FltkViewport::draw ()
 
    scrollDX = 0;
    scrollDY = 0;
+
+   /* Same timing as UI::sync_native_location(): the NSWindow exists now. */
+   syncNativeScrollbars (false);
+}
+
+void FltkViewport::show ()
+{
+   FltkWidgetView::show ();
+   syncNativeScrollbars (false);
+}
+
+void FltkViewport::hide ()
+{
+   FltkWidgetView::hide ();
+   syncNativeScrollbars (false);
 }
 
 int FltkViewport::handle (int event)
@@ -386,6 +498,14 @@ int FltkViewport::handle (int event)
             return 1;
          }
       }
+      if (nativeHooks && nativeScroller) {
+         if (!Fl::event_dx() && !Fl::event_dy())
+            return 0;
+         scroll(Fl::event_dx() * hscrollbar->linesize(),
+                Fl::event_dy() * vscrollbar->linesize());
+         syncNativeScrollbars(true);
+         return 1;
+      }
       return (Fl::event_dx() ? hscrollbar : vscrollbar)->handle(event);
       break;
 
@@ -441,6 +561,29 @@ void FltkViewport::setCanvasSize (int width, int ascent, int descent)
 }
 
 /*
+ * Browsers style scrollbars after the page, not the desktop: a light page
+ * gets light scrollers even when the system is in dark mode.
+ */
+void FltkViewport::setBgColor (core::style::Color *color)
+{
+   FltkWidgetView::setBgColor (color);
+
+   int rgb = color ? color->getColor () : 0xffffff;
+   /* Rec. 709 relative luminance on 0..255 channels. */
+   int luma = (2126 * ((rgb >> 16) & 0xff) + 7152 * ((rgb >> 8) & 0xff) +
+               722 * (rgb & 0xff)) / 10000;
+   bool dark = luma < 128;
+   gutterColor = fl_rgb_color ((rgb >> 16) & 0xff, (rgb >> 8) & 0xff,
+                               rgb & 0xff);
+   if (nativeHooks && nativeScroller)
+      damage (FL_DAMAGE_ALL);   /* repaint the gutters in the new colour */
+   if (dark != darkBg) {
+      darkBg = dark;
+      syncNativeScrollbars (false);
+   }
+}
+
+/*
  * This is used to simulate mouse motion (e.g., when scrolling).
  */
 void FltkViewport::positionChanged ()
@@ -480,18 +623,18 @@ bool FltkViewport::usesViewport ()
 
 int FltkViewport::getHScrollbarThickness ()
 {
-   return SCROLLBAR_THICKNESS;
+   return sbThickness;
 }
 
 int FltkViewport::getVScrollbarThickness ()
 {
-   return SCROLLBAR_THICKNESS;
+   return sbThickness;
 }
 
 void FltkViewport::scrollTo (int x, int y)
 {
-   int hdiff = vscrollbar->visible () ? SCROLLBAR_THICKNESS : 0;
-   int vdiff = hscrollbar->visible () ? SCROLLBAR_THICKNESS : 0;
+   int hdiff = vsVisible ? sbThickness : 0;
+   int vdiff = hsVisible ? sbThickness : 0;
 
    x = misc::min (x, canvasWidth - w() + hdiff);
    x = misc::max (x, 0);
@@ -526,8 +669,8 @@ void FltkViewport::scroll (int dx, int dy)
 
 void FltkViewport::scroll (core::ScrollCommand cmd)
 {
-   int hdiff = vscrollbar->visible () ? SCROLLBAR_THICKNESS : 0;
-   int vdiff = hscrollbar->visible () ? SCROLLBAR_THICKNESS : 0;
+   int hdiff = vsVisible ? sbThickness : 0;
+   int vdiff = hsVisible ? sbThickness : 0;
    if (cmd == core::SCREEN_UP_CMD) {
       scroll (0, -h () + pageOverlap + vdiff);
    } else if (cmd == core::SCREEN_DOWN_CMD) {
@@ -599,22 +742,36 @@ void FltkViewport::setViewportSize (int width, int height,
                                     int hScrollbarThickness,
                                     int vScrollbarThickness)
 {
-   int adjustReq =
-      (hscrollbar->visible() ? !hScrollbarThickness : hScrollbarThickness) ||
-      (vscrollbar->visible() ? !vScrollbarThickness : vScrollbarThickness);
+   bool hNeed = hScrollbarThickness > 0, vNeed = vScrollbarThickness > 0;
+
+   if (nativeHooks && nativeScroller && sbThickness == 0) {
+      /* Overlay scrollers reserve no space, so the layout always passes 0.
+       * Whether one is needed follows from the canvas alone. */
+      hNeed = canvasWidth > width;
+      vNeed = canvasHeight > height;
+   }
+
+   int adjustReq = hNeed != hsVisible || vNeed != vsVisible;
 
    _MSG("FltkViewport::setViewportSize old_w,old_h=%dx%d -> w,h=%dx%d\n"
        "\t hThick=%d hVis=%d, vThick=%d vVis=%d, adjustReq=%d\n",
        w(),h(),width,height,
-       hScrollbarThickness,hscrollbar->visible(),
-       vScrollbarThickness,vscrollbar->visible(), adjustReq);
+       hScrollbarThickness,hsVisible,
+       vScrollbarThickness,vsVisible, adjustReq);
 
-   (hScrollbarThickness > 0) ? hscrollbar->show () : hscrollbar->hide ();
-   (vScrollbarThickness > 0) ? vscrollbar->show () : vscrollbar->hide ();
+   hsVisible = hNeed;
+   vsVisible = vNeed;
+   if (nativeHooks && nativeScroller) {
+      hscrollbar->hide ();
+      vscrollbar->hide ();
+   } else {
+      hNeed ? hscrollbar->show () : hscrollbar->hide ();
+      vNeed ? vscrollbar->show () : vscrollbar->hide ();
+   }
 
    /* If no scrollbar, go to the beginning */
-   scroll(hScrollbarThickness ? 0 : -scrollX,
-          vScrollbarThickness ? 0 : -scrollY);
+   scroll(hNeed ? 0 : -scrollX,
+          vNeed ? 0 : -scrollY);
 
    /* Adjust when scrollbar visibility changes */
    if (adjustReq)

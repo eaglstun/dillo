@@ -359,6 +359,7 @@ public:
 
    void scrollPosChanged (View *view, int x, int y);
    void viewportSizeChanged (View *view, int width, int height);
+   void scrollbarThicknessChanged (View *view);
 
    inline Platform *getPlatform ()
    {

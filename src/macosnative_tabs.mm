@@ -83,6 +83,11 @@ static NSWindow *nativeWindow(void *fl_window)
    return mapped ? (NSWindow *)mapped.pointerValue : (NSWindow *)fl_xid(window);
 }
 
+void *a_Mac_tabs_native_window(void *fl_window)
+{
+   return (__bridge void *)nativeWindow(fl_window);
+}
+
 void a_Mac_tabs_configure(void *fl_window)
 {
    NSWindow *window = nativeWindow(fl_window);

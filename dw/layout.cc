@@ -1346,6 +1346,31 @@ void Layout::viewportSizeChanged (View *view, int width, int height)
    DBG_OBJ_LEAVE ();
 }
 
+/**
+ * \brief The view now reserves a different amount of space for its
+ *    scrollbars (e.g. the platform switched between overlay and always-shown
+ *    scrollers), so re-read it and reflow.
+ */
+void Layout::scrollbarThicknessChanged (View *view)
+{
+   DBG_OBJ_ENTER ("resize", 0, "scrollbarThicknessChanged", "%p", view);
+
+   if (usesViewport && view->usesViewport ()) {
+      hScrollbarThickness = view->getHScrollbarThickness ();
+      vScrollbarThickness = view->getVScrollbarThickness ();
+      canvasHeightGreater = false;
+      resizeCounter = 0;
+      containerSizeChanged ();
+
+      DBG_OBJ_SET_NUM ("hScrollbarThickness", hScrollbarThickness);
+      DBG_OBJ_SET_NUM ("vScrollbarThickness", vScrollbarThickness);
+      DBG_OBJ_SET_SYM ("canvasHeightGreater",
+                       canvasHeightGreater ? "true" : "false");
+   }
+
+   DBG_OBJ_LEAVE ();
+}
+
 void Layout::containerSizeChanged ()
 {
    DBG_OBJ_ENTER0 ("resize", 0, "containerSizeChanged");

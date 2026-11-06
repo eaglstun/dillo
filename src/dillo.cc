@@ -69,6 +69,7 @@
 #  include <dirent.h>
 #  include <CoreText/CoreText.h>
 #  include "macosautomation.hh"
+#  include "macosscrollers.hh"
 #endif
 
 #include "dw/fltkcore.hh"
@@ -635,6 +636,7 @@ int main(int argc, char **argv)
 #ifdef __APPLE__
    registerBundledFonts();
    a_Mac_automation_init();
+   a_Mac_scrollers_init();
 #endif
    checkPreferredFonts();
 
