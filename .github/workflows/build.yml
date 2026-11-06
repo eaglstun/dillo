@@ -218,6 +218,29 @@ jobs:
         make
         make check
       shell: alpine.sh {0}
+  ios-simulator-tests:
+    # The iOS app (ios/) is built with Xcode from ios/project.yml. Build it and
+    # run its hosted tests on whichever iPhone simulator the image provides.
+    needs: ubuntu-latest-html-tests
+    runs-on: macos-15
+    steps:
+    - uses: actions/checkout@v4
+    - name: Install XcodeGen
+      run: brew install xcodegen
+    - name: Generate project
+      run: cd ios && xcodegen generate
+    - name: Build and test
+      run: |
+        cd ios
+        udid=$(xcrun simctl list devices available -j | python3 -c '
+        import json, sys
+        d = json.load(sys.stdin)["devices"]
+        ids = [x["udid"] for rt, devs in sorted(d.items(), reverse=True)
+               if "iOS" in rt for x in devs if x["name"].startswith("iPhone")]
+        print(ids[0] if ids else "")')
+        test -n "$udid" || { echo "no iPhone simulator available"; exit 1; }
+        xcodebuild test -project DilloSpike.xcodeproj -scheme Dillo \
+          -destination "id=$udid" CODE_SIGNING_ALLOWED=NO
   macOS-15-openssl-1-1:
     needs: ubuntu-latest-html-tests
     runs-on: macos-15
