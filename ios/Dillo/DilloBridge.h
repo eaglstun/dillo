@@ -107,6 +107,10 @@ typedef NS_ENUM(NSInteger, DilloContextKind) {
 /// the caller performs a normal load.
 - (BOOL)navigateFragment:(NSString *)urlString;
 
+/// Absolute URLs of every link on the current page, in document order
+/// (the same list as the desktop `dilloc links`). Empty before a load.
+- (NSArray<NSString *> *)linkURLs;
+
 /// Find-in-page. Result: 0 = found, 1 = wrapped (restarted from top),
 /// 2 = not found. resetFind clears highlights and restarts.
 - (int)findText:(NSString *)key caseSensitive:(BOOL)caseSens
