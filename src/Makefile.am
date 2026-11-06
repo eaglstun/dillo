@@ -177,6 +177,8 @@ dillo_SOURCES += \
 	macosnative_tabs.mm \
 	macoscontextmenu.hh \
 	macoscontextmenu.mm \
+	macosscrollers.hh \
+	macosscrollers.mm \
 	macosappearance.hh \
 	macosappearance.mm
 endif

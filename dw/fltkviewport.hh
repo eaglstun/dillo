@@ -28,8 +28,36 @@
 #include "fltkcore.hh"
 #include "fltkviewbase.hh"
 
+class Fl_Window;
+
 namespace dw {
 namespace fltk {
+
+/**
+ * \brief Optional platform scrollbars drawn by the toolkit instead of FLTK.
+ *
+ * Installed once with FltkViewport::setNativeScrollbarHooks() before any
+ * viewport is created. When present, the FLTK scrollbars stay hidden and
+ * only serve as storage for the line size. The platform side owns one
+ * scrolling container per viewport, laid over it in window coordinates,
+ * that mirrors the canvas size and scroll position and reports back when
+ * the user moves its scrollbars.
+ */
+struct FltkNativeScrollbarHooks {
+   /** The user scrolled with the platform scrollbars to canvas (x, y). */
+   typedef void (*ScrolledCb) (void *viewport, int x, int y);
+
+   void *(*create) (void *viewport, ScrolledCb scrolled);
+   void (*destroy) (void *handle);
+   /** (x, y, w, h) is the whole viewport in window coordinates.
+    *  flash reveals overlay scrollers; dark styles them for a dark page. */
+   void (*sync) (void *handle, Fl_Window *window, int x, int y, int w, int h,
+                 int visible, int canvasWidth, int canvasHeight,
+                 int scrollX, int scrollY, int showH, int showV,
+                 int onLeft, int flash, int dark);
+   /** Space to reserve beside the page; 0 for overlay scrollers. */
+   int (*thickness) ();
+};
 
 class FltkViewport: public FltkWidgetView
 {
@@ -38,6 +66,19 @@ public:
 
 private:
    enum { SCROLLBAR_THICKNESS = 15 };
+
+   static const FltkNativeScrollbarHooks *nativeHooks;
+   static FltkViewport *nativeViewports;
+   FltkViewport *nativePrev, *nativeNext;
+   void *nativeScroller;
+
+   /* Space reserved for each scrollbar, and whether each one is logically
+    * shown. With overlay scrollers the thickness is 0 while a scrollbar is
+    * still shown, so the two cannot be derived from each other. */
+   int sbThickness;
+   bool hsVisible, vsVisible;
+   bool darkBg;   /* page background is dark: match the scroller style */
+   Fl_Color gutterColor;   /* page background, painted under native bars */
 
    int scrollX, scrollY;
    int scrollDX, scrollDY;
@@ -74,6 +115,9 @@ private:
    void updateCanvasWidgets (int oldScrollX, int oldScrollY);
    static void draw_area (void *data, int x, int y, int w, int h);
 
+   void syncNativeScrollbars (bool flash);
+   static void nativeScrolledCb (void *viewport, int x, int y);
+
 protected:
    int translateViewXToCanvasX (int x);
    int translateViewYToCanvasY (int y);
@@ -84,11 +128,17 @@ public:
    FltkViewport (int x, int y, int w, int h, const char *label = 0);
    ~FltkViewport ();
 
+   static void setNativeScrollbarHooks (const FltkNativeScrollbarHooks *hooks);
+   static void nativeScrollbarStyleChanged ();
+
    void resize(int x, int y, int w, int h);
    void draw ();
    int handle (int event);
+   void show ();
+   void hide ();
 
    void setCanvasSize (int width, int ascent, int descent);
+   void setBgColor (core::style::Color *color);
 
    bool usesViewport ();
    int getHScrollbarThickness ();
