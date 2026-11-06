@@ -90,6 +90,23 @@ final class BrowserViewController: UIViewController {
     private let homePage = "https://dillo-browser.github.io/"
     private let initialURL: URL?
 
+    // MARK: Automation state (read by the App Intents in Automation.swift)
+
+    /// Bumped by every load; see load(_:recordHistory:completion:).
+    private var loadGeneration = 0
+
+    /// The page currently shown, as last loaded successfully.
+    private(set) var currentPageURL: String?
+    /// The page's <title>, or nil if it has none.
+    private(set) var currentPageTitle: String?
+    /// The HTML handed to the engine for the current page.
+    private(set) var currentPageSource: String?
+
+    /// Absolute URLs of the links on the current page.
+    var currentPageLinks: [String] {
+        isViewLoaded ? bridge.linkURLs() : []
+    }
+
     init(initialURL: URL? = nil) {
         self.initialURL = initialURL
         super.init(nibName: nil, bundle: nil)
@@ -121,6 +138,7 @@ final class BrowserViewController: UIViewController {
         }
         bridge.onTitle = { [weak self] title in
             self?.titleLabel.text = title
+            self?.currentPageTitle = title.isEmpty ? nil : title
         }
         bridge.onOpenURL = { [weak self] url, body, contentType in
             guard let self = self else { return }
@@ -579,16 +597,26 @@ final class BrowserViewController: UIViewController {
         load(history[historyIndex], recordHistory: false)
     }
 
-    private func navigate(to url: String) {
-        load(HistoryEntry(url: url), recordHistory: true)
+    private func navigate(to url: String,
+                          completion: ((Result<String, Error>) -> Void)? = nil) {
+        load(HistoryEntry(url: url), recordHistory: true,
+             completion: completion)
     }
 
-    func openAutomationURL(_ url: URL) {
+    /// Open url for automation. completion gets the final URL (after
+    /// redirects) once the page is parsed, or the load error.
+    func openAutomationURL(_ url: URL,
+                           completion: ((Result<String, Error>) -> Void)? = nil) {
         loadViewIfNeeded()
-        navigate(to: url.absoluteString)
+        navigate(to: url.absoluteString, completion: completion)
     }
 
-    private func load(_ entry: HistoryEntry, recordHistory: Bool) {
+    private func load(_ entry: HistoryEntry, recordHistory: Bool,
+                      completion: ((Result<String, Error>) -> Void)? = nil) {
+        // Only the newest load may update the page: an older, slower one
+        // (e.g. the home page still loading at launch) must not overwrite it.
+        loadGeneration += 1
+        let generation = loadGeneration
         spinner.startAnimating()
         addressField.text = entry.url
         view.endEditing(true)
@@ -596,6 +624,10 @@ final class BrowserViewController: UIViewController {
                     bodyContentType: entry.bodyContentType) {
             [weak self] result in
             guard let self = self else { return }
+            guard generation == self.loadGeneration else {
+                completion?(.failure(DilloIntentError.superseded))
+                return
+            }
             self.spinner.stopAnimating()
             switch result {
             case .success(let page):
@@ -610,14 +642,23 @@ final class BrowserViewController: UIViewController {
                 }
                 self.addressField.text = page.finalURL
                 self.titleLabel.text = ""
+                self.currentPageURL = page.finalURL
+                self.currentPageSource = page.html
+                self.currentPageTitle = nil   // onTitle sets it while parsing
                 self.bridge.clearCache()
                 for (url, css) in page.stylesheets {
                     self.bridge.seedCSS(css, forURL: url)
                 }
                 self.bridge.loadHTML(page.html, url: page.finalURL)
                 self.scrollView.setContentOffset(.zero, animated: false)
+                completion?(.success(page.finalURL))
             case .failure(let error):
+                // The screen now shows an error page, not the old page.
+                self.currentPageURL = nil
+                self.currentPageSource = nil
+                self.currentPageTitle = nil
                 self.showErrorPage(error, for: entry.url)
+                completion?(.failure(error))
             }
             self.backButton.isEnabled = self.historyIndex > 0
         }

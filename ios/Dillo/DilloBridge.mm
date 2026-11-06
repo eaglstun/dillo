@@ -31,6 +31,7 @@
 #include "src/bw.h"
 #include "src/web.hh"
 #include "src/html_common.hh"
+#include "src/html.hh"
 #include "src/styleengine.hh"
 
 #include "AppleCoreTextPlatform.hh"
@@ -546,6 +547,24 @@ static void initDilloOnce (void)
 - (void)reportScrollX:(int)x y:(int)y
 {
    _layout->scrollPosChanged (_view, x, y);
+}
+
+- (NSArray<NSString *> *)linkURLs
+{
+   NSMutableArray<NSString *> *urls = [NSMutableArray array];
+   void *doc = _bw ? a_Bw_get_current_doc (_bw) : NULL;
+
+   if (!doc)
+      return urls;
+   for (int i = 0; i < a_Html_link_count (doc); i++) {
+      /* Entries are NULL for links whose href did not parse. */
+      DilloUrl *url = a_Html_link_url (doc, i);
+      NSString *str = url ? [NSString stringWithUTF8String:URL_STR (url)]
+                          : nil;
+      if (str.length)
+         [urls addObject:str];
+   }
+   return urls;
 }
 
 - (BOOL)navigateFragment:(NSString *)urlString

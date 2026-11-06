@@ -46,8 +46,100 @@ result to the system **Open URLs** action. This works on macOS and iOS and
 does not require Dillo to be running first. The longer, percent-encoded form
 `dillo://open?url=https%3A%2F%2Fexample.com` is also accepted.
 
-On iOS, Dillo additionally contributes an **Open URL in Dillo** action
-directly to Shortcuts and Siri.
+### iOS Shortcuts actions
+
+On iOS, Dillo adds these actions directly to Shortcuts (and the first three to
+Siri):
+
+| action                     | returns                                          |
+| -------------------------- | ------------------------------------------------ |
+| **Open URL in Dillo**      | the final URL once the page has loaded           |
+| **Get Current Page URL**   | URL                                              |
+| **Get Current Page Title** | text (empty if the page has no `<title>`)        |
+| **Get Page Source**        | the page's HTML                                  |
+| **Get Links on Page**      | list of URLs, in page order                      |
+
+Chain them like the macOS recipes below: **Open URL in Dillo** → **Get Page
+Source** → **Make Rich Text from HTML** → **Get Text from Input**. The read
+actions fail with "No page is open in Dillo" when there is none (including
+after a failed load, when Dillo shows an error page). Open URL waits for the
+page, so a following read action sees it.
+
+What iOS can't do that the desktop can: form filling (`set`/`submit` live in
+desktop-only code), and fetching through Dillo's own network stack. iOS
+fetches with `URLSession`, so section 2's bot-detection behaviour doesn't
+apply there. Implementation: `ios/Dillo/Automation.swift`; tests:
+`ios/DilloTests` (`xcodebuild test -scheme Dillo` from `ios/`).
+
+### macOS Shortcuts with return values ("Run Shell Script")
+
+`dillo:` URLs only send Dillo somewhere. To get something _back_ (a title,
+the page source, a list of links) use Shortcuts' **Run Shell Script** action
+with the `dilloc` that ships inside the app bundle:
+
+```
+/Applications/Dillo.app/Contents/MacOS/dilloc
+```
+
+(`make` builds the bundle as `build/mac/Dillo.app`; copy it to
+`/Applications`.)
+
+One-time setup: Shortcuts → Settings → Advanced → **Allow Running Scripts**.
+
+Run Shell Script starts with an almost empty environment, and `dilloc` needs a
+running Dillo. Start every script with this preamble. It launches Dillo if
+needed and waits until it answers (about a second from cold):
+
+```sh
+D=/Applications/Dillo.app/Contents/MacOS/dilloc
+"$D" ping >/dev/null 2>&1 || { open -a Dillo
+  for i in {1..50}; do "$D" ping >/dev/null 2>&1 && break; sleep 0.2; done; }
+```
+
+Then, for example:
+
+**Current page as a link** (Shell: zsh, Input: nothing). Feed the output to
+"Add to Notes", "Copy to Clipboard", etc.
+
+```sh
+echo "$("$D" title) — $("$D" url)"
+```
+
+**Fetch a page and return its source** (Input: Shortcut Input, Pass Input:
+_as arguments_, so the URL arrives as `$1`):
+
+```sh
+"$D" open "$1" && "$D" wait 30 && "$D" dump
+```
+
+Follow it with Shortcuts' own **Make Rich Text from HTML** and **Get Text
+from Input** to get readable text. Pages that need JavaScript come back
+empty (see section 2 for which pages work).
+
+**All links on the current page** (one per line, `index<TAB>url`):
+
+```sh
+"$D" links | cut -f2
+```
+
+**Fill and submit a site's search form**, e.g. the first form, field `q`,
+with the Shortcut input (Pass Input: _as arguments_):
+
+```sh
+"$D" noninteractive 1
+"$D" set 0 q "$1" && "$D" submit 0 && sleep 1 && "$D" wait 30 && "$D" url
+```
+
+Use `forms` and `inputs N` first to find the form index and field name.
+
+Notes:
+
+- `dilloc` exits non-zero when something fails (2 = Dillo not running), and
+  Shortcuts stops the shortcut on a non-zero exit, so a failed step doesn't
+  quietly feed empty output to the next action.
+- With several Dillo processes running, `dilloc` drives whichever answers
+  first. Native tabs share one process, so this only matters if you start
+  Dillo more than once. Set `DILLO_PID` to choose.
 
 ### Connecting
 
