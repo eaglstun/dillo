@@ -58,6 +58,8 @@
 #include "dw/fltkviewport.hh"
 
 #include "nav.h"
+#include "html.hh"
+#include "cssparser.hh"
 
 //#define DEFAULT_TAB_LABEL "-.untitled.-"
 #define DEFAULT_TAB_LABEL "-.new.-"
@@ -1135,6 +1137,25 @@ void a_UIcmd_reload_all_active()
 void a_UIcmd_repush(void *vbw)
 {
    a_Nav_repush((BrowserWindow*)vbw);
+}
+
+/*
+ * The platform's light/dark preference changed: record it for
+ * prefers-color-scheme and re-render, from cache, only the pages whose
+ * stylesheets asked about it (re-rendering drops typed form input, so
+ * pages that do not care are left alone).
+ */
+void a_UIcmd_set_prefers_dark(int dark)
+{
+   if ((dark != 0) == CssParser::getPrefersDark())
+      return;
+   CssParser::setPrefersDark(dark != 0);
+
+   for (int i = 0; i < a_Bw_num(); i++) {
+      BrowserWindow *bw = a_Bw_get(i);
+      if (a_Html_color_scheme_sensitive(a_Bw_get_current_doc(bw)))
+         a_Nav_repush(bw);
+   }
 }
 
 /*

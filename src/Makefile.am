@@ -178,7 +178,9 @@ dillo_SOURCES += \
 	macoscontextmenu.hh \
 	macoscontextmenu.mm \
 	macosscrollers.hh \
-	macosscrollers.mm
+	macosscrollers.mm \
+	macosappearance.hh \
+	macosappearance.mm
 endif
 
 # https://www.gnu.org/software/automake/manual/html_node/Built-Sources-Example.html

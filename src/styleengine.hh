@@ -31,6 +31,7 @@ class StyleEngine;
  */
 class StyleEngine {
    private:
+      bool colorSchemeSensitive;
       struct Node {
          CssPropertyList *styleAttrProperties;
          CssPropertyList *styleAttrPropertiesImportant;
@@ -87,6 +88,10 @@ class StyleEngine {
 
       void parse (DilloHtml *html, DilloUrl *url, const char *buf, int buflen,
                   CssOrigin origin);
+      /** Some stylesheet or media attribute of this page asked about
+       *  prefers-color-scheme: re-render it when the scheme changes. */
+      bool isColorSchemeSensitive () { return colorSchemeSensitive; }
+      void setColorSchemeSensitive () { colorSchemeSensitive = true; }
       void startElement (int tag, BrowserWindow *bw);
       void startElement (const char *tagname, BrowserWindow *bw);
       void setId (const char *id);

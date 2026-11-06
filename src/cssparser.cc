@@ -1637,7 +1637,6 @@ void CssParser::parseImport(DilloHtml *html)
 {
    char *urlStr = NULL;
    bool importSyntaxIsOK = false;
-   bool mediaSyntaxIsOK = true;
    bool mediaIsSelected = true;
 
    nextToken();
@@ -1650,26 +1649,11 @@ void CssParser::parseImport(DilloHtml *html)
 
    nextToken();
 
-   /* parse a comma-separated list of media */
-   if (ttype == CSS_TK_SYMBOL) {
-      mediaSyntaxIsOK = false;
-      mediaIsSelected = false;
-      while (ttype == CSS_TK_SYMBOL) {
-         if (dStrAsciiCasecmp(tval, "all") == 0 ||
-             dStrAsciiCasecmp(tval, "screen") == 0)
-            mediaIsSelected = true;
-         nextToken();
-         if (ttype == CSS_TK_CHAR && tval[0] == ',') {
-            nextToken();
-         } else {
-            mediaSyntaxIsOK = true;
-            break;
-         }
-      }
-   }
+   /* an optional media query list */
+   if (!(ttype == CSS_TK_CHAR && tval[0] == ';') && ttype != CSS_TK_END)
+      mediaIsSelected = parseMediaQueryList() == MEDIA_TRUE;
 
-   if (mediaSyntaxIsOK &&
-       ttype == CSS_TK_CHAR &&
+   if (ttype == CSS_TK_CHAR &&
        tval[0] == ';') {
       importSyntaxIsOK = true;
       nextToken();
@@ -1690,35 +1674,20 @@ void CssParser::parseImport(DilloHtml *html)
 
 void CssParser::parseMedia()
 {
-   bool mediaSyntaxIsOK = false;
-   bool mediaIsSelected = false;
-
    nextToken();
 
-   /* parse a comma-separated list of media */
-   while (ttype == CSS_TK_SYMBOL) {
-      if (dStrAsciiCasecmp(tval, "all") == 0 ||
-          dStrAsciiCasecmp(tval, "screen") == 0)
-         mediaIsSelected = true;
-      nextToken();
-      if (ttype == CSS_TK_CHAR && tval[0] == ',') {
-         nextToken();
-      } else {
-         mediaSyntaxIsOK = true;
-         break;
-      }
-   }
+   /* Only definite matches apply: a condition Dillo cannot evaluate (e.g.
+    * a width) skips the block, as all conditions did before. */
+   MediaMatch match = parseMediaQueryList();
 
    /* check that the syntax is OK so far */
-   if (!(mediaSyntaxIsOK &&
-         ttype == CSS_TK_CHAR &&
-         tval[0] == '{')) {
+   if (!(ttype == CSS_TK_CHAR && tval[0] == '{')) {
       ignoreStatement();
       return;
    }
 
    /* parse/ignore the block as required */
-   if (mediaIsSelected) {
+   if (match == MEDIA_TRUE) {
       nextToken();
       while (ttype != CSS_TK_END) {
          parseRuleset();
@@ -1729,6 +1698,268 @@ void CssParser::parseMedia()
       }
    } else
       ignoreBlock();
+}
+
+/* ----------------------------------------------------------------------
+ *    Media queries (a subset of Media Queries level 4/5)
+ *
+ * Results are three-valued: features Dillo cannot evaluate yield UNKNOWN,
+ * combined with Kleene logic, so a caller can tell "definitely not" from
+ * "can't say". Only prefers-color-scheme is evaluated today.
+ * ---------------------------------------------------------------------- */
+
+bool CssParser::prefersDark = false;
+unsigned CssParser::colorSchemeQueries = 0;
+
+static CssParser::MediaMatch mediaAnd(CssParser::MediaMatch a,
+                                      CssParser::MediaMatch b)
+{
+   if (a == CssParser::MEDIA_FALSE || b == CssParser::MEDIA_FALSE)
+      return CssParser::MEDIA_FALSE;
+   if (a == CssParser::MEDIA_UNKNOWN || b == CssParser::MEDIA_UNKNOWN)
+      return CssParser::MEDIA_UNKNOWN;
+   return CssParser::MEDIA_TRUE;
+}
+
+static CssParser::MediaMatch mediaOr(CssParser::MediaMatch a,
+                                     CssParser::MediaMatch b)
+{
+   if (a == CssParser::MEDIA_TRUE || b == CssParser::MEDIA_TRUE)
+      return CssParser::MEDIA_TRUE;
+   if (a == CssParser::MEDIA_UNKNOWN || b == CssParser::MEDIA_UNKNOWN)
+      return CssParser::MEDIA_UNKNOWN;
+   return CssParser::MEDIA_FALSE;
+}
+
+static CssParser::MediaMatch mediaNot(CssParser::MediaMatch a)
+{
+   if (a == CssParser::MEDIA_TRUE)
+      return CssParser::MEDIA_FALSE;
+   if (a == CssParser::MEDIA_FALSE)
+      return CssParser::MEDIA_TRUE;
+   return a;
+}
+
+/**
+ * Skip the rest of a malformed query, up to the next ',' outside
+ * parentheses, or the end of the list.
+ */
+void CssParser::skipMediaQuery()
+{
+   int depth = 0;
+
+   while (ttype != CSS_TK_END) {
+      if (ttype == CSS_TK_CHAR) {
+         char c = tval[0];
+         if (c == '(') {
+            depth++;
+         } else if (c == ')') {
+            if (depth > 0)
+               depth--;
+         } else if (depth == 0 && (c == ',' || c == '{' || c == ';')) {
+            return;
+         }
+      }
+      nextToken();
+   }
+}
+
+CssParser::MediaMatch CssParser::evalMediaFeature(const char *name,
+                                                  const char *value)
+{
+   if (dStrAsciiCasecmp(name, "prefers-color-scheme") == 0) {
+      colorSchemeQueries++;
+      if (!value)   /* boolean context: true for both light and dark */
+         return MEDIA_TRUE;
+      if (dStrAsciiCasecmp(value, "dark") == 0)
+         return prefersDark ? MEDIA_TRUE : MEDIA_FALSE;
+      if (dStrAsciiCasecmp(value, "light") == 0)
+         return prefersDark ? MEDIA_FALSE : MEDIA_TRUE;
+      return MEDIA_FALSE;
+   }
+   return MEDIA_UNKNOWN;
+}
+
+/**
+ * Parse "( ... )": a feature test, or a nested condition. Leaves the
+ * token after ')'. Returns UNKNOWN for anything not understood.
+ */
+CssParser::MediaMatch CssParser::parseMediaInParens()
+{
+   MediaMatch result = MEDIA_UNKNOWN;
+
+   /* caller checked for '(' */
+   nextToken();
+
+   if ((ttype == CSS_TK_CHAR && tval[0] == '(') ||
+       (ttype == CSS_TK_SYMBOL && dStrAsciiCasecmp(tval, "not") == 0)) {
+      result = parseMediaCondition();
+   } else if (ttype == CSS_TK_SYMBOL) {
+      char name[maxStrLen], value[maxStrLen];
+
+      strcpy(name, tval);
+      nextToken();
+      if (ttype == CSS_TK_CHAR && tval[0] == ':') {
+         nextToken();
+         /* numbers, lengths, ratios get "": only keywords are compared */
+         strcpy(value, ttype == CSS_TK_SYMBOL ? tval : "");
+         result = evalMediaFeature(name, value);
+      } else if (ttype == CSS_TK_CHAR && tval[0] == ')') {
+         result = evalMediaFeature(name, NULL);
+      } else {
+         /* range syntax such as (width >= 600px) */
+         result = MEDIA_UNKNOWN;
+      }
+   }
+
+   /* consume up to and including the matching ')' */
+   int depth = 1;
+   while (ttype != CSS_TK_END) {
+      if (ttype == CSS_TK_CHAR) {
+         if (tval[0] == '(') {
+            depth++;
+         } else if (tval[0] == ')') {
+            if (--depth == 0) {
+               nextToken();
+               break;
+            }
+         } else if (tval[0] == '{' || tval[0] == ';') {
+            break;   /* unbalanced: leave the terminator for the caller */
+         }
+      }
+      nextToken();
+   }
+   return result;
+}
+
+/**
+ * Parse "[not] (..) [and|or (..)]*".
+ */
+CssParser::MediaMatch CssParser::parseMediaCondition()
+{
+   if (ttype == CSS_TK_SYMBOL && dStrAsciiCasecmp(tval, "not") == 0) {
+      nextToken();
+      if (!(ttype == CSS_TK_CHAR && tval[0] == '('))
+         return MEDIA_FALSE;
+      return mediaNot(parseMediaInParens());
+   }
+   if (!(ttype == CSS_TK_CHAR && tval[0] == '('))
+      return MEDIA_FALSE;
+
+   MediaMatch result = parseMediaInParens();
+   while (ttype == CSS_TK_SYMBOL) {
+      bool isAnd = dStrAsciiCasecmp(tval, "and") == 0;
+      bool isOr = dStrAsciiCasecmp(tval, "or") == 0;
+      if (!isAnd && !isOr)
+         break;
+      nextToken();
+      if (!(ttype == CSS_TK_CHAR && tval[0] == '('))
+         return MEDIA_FALSE;
+      MediaMatch next = parseMediaInParens();
+      result = isAnd ? mediaAnd(result, next) : mediaOr(result, next);
+   }
+   return result;
+}
+
+/**
+ * Parse one query: "[not|only] type [and (..)]*" or a bare condition.
+ * A malformed query evaluates to false, as "not all" in the spec.
+ */
+CssParser::MediaMatch CssParser::parseMediaQuery()
+{
+   MediaMatch result;
+
+   if (ttype == CSS_TK_CHAR && tval[0] == '(') {
+      result = parseMediaCondition();
+   } else {
+      bool negate = false, hasType = true;
+
+      if (ttype == CSS_TK_SYMBOL && dStrAsciiCasecmp(tval, "not") == 0) {
+         nextToken();
+         if (ttype == CSS_TK_CHAR && tval[0] == '(') {
+            /* "not (...) [and (...)]*" negates only the first condition */
+            hasType = false;
+            result = mediaNot(parseMediaInParens());
+            while (ttype == CSS_TK_SYMBOL &&
+                   dStrAsciiCasecmp(tval, "and") == 0) {
+               nextToken();
+               if (!(ttype == CSS_TK_CHAR && tval[0] == '('))
+                  break;
+               result = mediaAnd(result, parseMediaInParens());
+            }
+         } else {
+            negate = true;   /* "not type ..." negates the whole query */
+         }
+      } else if (ttype == CSS_TK_SYMBOL &&
+                 dStrAsciiCasecmp(tval, "only") == 0) {
+         nextToken();
+      }
+
+      if (hasType) {
+         if (ttype != CSS_TK_SYMBOL) {
+            skipMediaQuery();
+            return MEDIA_FALSE;
+         }
+         result = (dStrAsciiCasecmp(tval, "all") == 0 ||
+                   dStrAsciiCasecmp(tval, "screen") == 0) ?
+                  MEDIA_TRUE : MEDIA_FALSE;
+         nextToken();
+         while (ttype == CSS_TK_SYMBOL &&
+                dStrAsciiCasecmp(tval, "and") == 0) {
+            nextToken();
+            if (!(ttype == CSS_TK_CHAR && tval[0] == '(')) {
+               skipMediaQuery();
+               return MEDIA_FALSE;
+            }
+            result = mediaAnd(result, parseMediaInParens());
+         }
+         if (negate)
+            result = mediaNot(result);
+      }
+   }
+
+   /* anything else before ',' or the end makes the query malformed */
+   if (!(ttype == CSS_TK_END ||
+         (ttype == CSS_TK_CHAR &&
+          (tval[0] == ',' || tval[0] == '{' || tval[0] == ';')))) {
+      skipMediaQuery();
+      return MEDIA_FALSE;
+   }
+   return result;
+}
+
+/**
+ * Parse a comma-separated media query list, stopping at '{', ';' or the
+ * end of input without consuming it. An empty list matches everything.
+ */
+CssParser::MediaMatch CssParser::parseMediaQueryList()
+{
+   MediaMatch result = MEDIA_FALSE;
+   bool any = false;
+
+   while (ttype != CSS_TK_END &&
+          !(ttype == CSS_TK_CHAR && (tval[0] == '{' || tval[0] == ';'))) {
+      result = mediaOr(result, parseMediaQuery());
+      any = true;
+      if (ttype == CSS_TK_CHAR && tval[0] == ',')
+         nextToken();
+   }
+   return any ? result : MEDIA_TRUE;
+}
+
+CssParser::MediaMatch CssParser::matchMedia(const char *mediaList)
+{
+   if (!mediaList)
+      return MEDIA_TRUE;
+
+   CssParser parser (NULL, CSS_ORIGIN_AUTHOR, NULL, mediaList,
+                     strlen(mediaList));
+   MediaMatch result = parser.parseMediaQueryList();
+
+   /* a stray '{' or ';' in an attribute: not a valid list */
+   if (parser.ttype != CSS_TK_END)
+      return MEDIA_FALSE;
+   return result;
 }
 
 const char * CssParser::propertyNameString(CssPropertyName name)

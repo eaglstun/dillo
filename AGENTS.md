@@ -85,6 +85,20 @@ to FLTK. `dw/` sees AppKit only through `FltkNativeScrollbarHooks`, installed by
   Dark Mode gets light scrollers. The gutters are painted with the page colour because
   the dark track is translucent.
 
+**Dark mode CSS.** `@media`, `@import`, and `<link>`/`<style media>` go through one
+media-query evaluator (`CssParser::matchMedia`, `src/cssparser.cc`) that answers
+true/false/unknown. Only media types and `prefers-color-scheme` are evaluated; any other
+feature (widths, resolution) is *unknown*. An `@media` block applies only on a definite
+true, as before when every condition was ignored, while a `media` attribute falls back to
+the historical "mentions screen or is all" rule on unknown. Do not make unknown features
+true or false wholesale: desktop stylesheets behind `min-width` links stop loading, or
+mobile `@media` blocks start applying. The scheme comes from
+`a_UIcmd_set_prefers_dark()`, which macOS feeds from `NSApp.effectiveAppearance`
+(`src/macosappearance.mm`). On a change it re-renders from cache only pages whose
+`StyleEngine` saw a color-scheme query, because re-rendering drops typed form input.
+Sites without dark CSS stay light; there is no forced darkening. `test/unit/media_queries`
+covers the evaluator.
+
 **Help menu.** Entries deep-link into `doc/user_help.in.html` by anchor — each item's
 `user_data` is the anchor id, and `a_UIcmd_open_help(bw, fragment)` appends it. Adding
 a section means adding an `id="..."` there and a menu entry here; nothing else knows
