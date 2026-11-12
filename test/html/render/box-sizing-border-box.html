@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Test box-sizing: border-box</title>
+<style>
+  body { margin: 0 }
+  .outer { width: 400px }
+  .bb { box-sizing: border-box; border: solid 5px; background: lightblue }
+  .w100 { width: 100%; padding: 0 20px }
+  .abs { width: 300px; padding: 10px 45px }
+</style>
+</head>
+<body>
+<div class="outer">
+  <div class="bb w100">A 100% wide border-box with padding stays 400px wide.</div>
+  <div class="bb abs">A 300px border-box with 45px side padding.</div>
+</div>
+</body>
+</html>

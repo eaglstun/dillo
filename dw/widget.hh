@@ -498,6 +498,26 @@ public:
    inline int boxRestHeight ()
    { return extraSpace.bottom + getStyle()->boxRestHeight (); }
    inline int boxDiffHeight () { return boxOffsetY () + boxRestHeight (); }
+
+   /**
+    * \brief The part of the box that a CSS 'width' does not include.
+    *
+    * With 'box-sizing: content-box' that is margin, border and padding;
+    * with 'border-box' only the margin, since 'width' covers the rest.
+    */
+   inline int boxSizingDiffWidth () {
+      if (getStyle()->boxSizing == style::BOX_SIZING_BORDER_BOX)
+         return extraSpace.left + extraSpace.right
+            + getStyle()->margin.left + getStyle()->margin.right;
+      return boxDiffWidth ();
+   }
+   /** \brief Like boxSizingDiffWidth(), for 'height'. */
+   inline int boxSizingDiffHeight () {
+      if (getStyle()->boxSizing == style::BOX_SIZING_BORDER_BOX)
+         return extraSpace.top + extraSpace.bottom
+            + getStyle()->margin.top + getStyle()->margin.bottom;
+      return boxDiffHeight ();
+   }
    
    /**
     * \brief See \ref dw-widget-sizes (or \ref dw-size-request-pos).

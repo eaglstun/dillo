@@ -598,6 +598,9 @@ void StyleEngine::apply (int i, StyleAttrs *attrs, CssPropertyList *props,
          case CSS_PROPERTY_BOTTOM:
             computeLength (&attrs->bottom, p->value.lenVal, attrs->font);
             break;
+         case CSS_PROPERTY_BOX_SIZING:
+            attrs->boxSizing = (BoxSizing) p->value.intVal;
+            break;
          case CSS_PROPERTY_CLEAR:
             attrs->clear = (ClearType) p->value.intVal;
             break;
@@ -897,18 +900,26 @@ int StyleEngine::containingBlockWidth (int i) {
           s->display != DISPLAY_INLINE_BLOCK)
          continue;
 
+      /* A border-box 'width' includes border and padding; the content
+       * width is what's left after taking them back out. */
+      int inner = s->borderWidth.left + s->padding.left
+         + s->borderWidth.right + s->padding.right;
+      int boxSizingDiff =
+         s->boxSizing == BOX_SIZING_BORDER_BOX ? inner : 0;
+
       int content;
       if (isAbsLength (s->width))
-         content = absLengthVal (s->width);
+         content = absLengthVal (s->width) - boxSizingDiff;
       else if (isPerLength (s->width))
-         content = multiplyWithPerLength (width, s->width);
+         content = multiplyWithPerLength (width, s->width) - boxSizingDiff;
       else
          content = width - s->boxDiffWidth ();
 
       if (isAbsLength (s->maxWidth))
-         content = MIN (content, absLengthVal (s->maxWidth));
+         content = MIN (content, absLengthVal (s->maxWidth) - boxSizingDiff);
       else if (isPerLength (s->maxWidth))
-         content = MIN (content, multiplyWithPerLength (width, s->maxWidth));
+         content = MIN (content, multiplyWithPerLength (width, s->maxWidth)
+                                 - boxSizingDiff);
 
       width = MAX (content, 0);
    }

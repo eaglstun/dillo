@@ -370,6 +370,11 @@ enum FloatType {
    FLOAT_RIGHT
 };
 
+enum BoxSizing {
+   BOX_SIZING_CONTENT_BOX,
+   BOX_SIZING_BORDER_BOX
+};
+
 enum ClearType {
    CLEAR_LEFT,
    CLEAR_RIGHT,
@@ -547,6 +552,7 @@ public:
 
    FloatType vloat; /* "float" is a keyword. */
    ClearType clear;
+   BoxSizing boxSizing;
 
    Overflow overflow;
 
