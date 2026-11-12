@@ -637,23 +637,29 @@ void StyleEngine::apply (int i, StyleAttrs *attrs, CssPropertyList *props,
          case CSS_PROPERTY_LIST_STYLE_TYPE:
             attrs->listStyleType = (ListStyleType) p->value.intVal;
             break;
+         /* Percentage margins and paddings refer to the width of the
+          * containing block, on all four sides. */
          case CSS_PROPERTY_MARGIN_BOTTOM:
-            computeValue (&attrs->margin.bottom, p->value.lenVal, attrs->font);
+            computeValue (&attrs->margin.bottom, p->value.lenVal, attrs->font,
+                          containingBlockWidth (i));
             if (attrs->margin.bottom < 0) // \todo fix negative margins in dw/*
                attrs->margin.bottom = 0;
             break;
          case CSS_PROPERTY_MARGIN_LEFT:
-            computeValue (&attrs->margin.left, p->value.lenVal, attrs->font);
+            computeValue (&attrs->margin.left, p->value.lenVal, attrs->font,
+                          containingBlockWidth (i));
             if (attrs->margin.left < 0) // \todo fix negative margins in dw/*
                attrs->margin.left = 0;
             break;
          case CSS_PROPERTY_MARGIN_RIGHT:
-            computeValue (&attrs->margin.right, p->value.lenVal, attrs->font);
+            computeValue (&attrs->margin.right, p->value.lenVal, attrs->font,
+                          containingBlockWidth (i));
             if (attrs->margin.right < 0) // \todo fix negative margins in dw/*
                attrs->margin.right = 0;
             break;
          case CSS_PROPERTY_MARGIN_TOP:
-            computeValue (&attrs->margin.top, p->value.lenVal, attrs->font);
+            computeValue (&attrs->margin.top, p->value.lenVal, attrs->font,
+                          containingBlockWidth (i));
             if (attrs->margin.top < 0) // \todo fix negative margins in dw/*
                attrs->margin.top = 0;
             break;
@@ -661,16 +667,20 @@ void StyleEngine::apply (int i, StyleAttrs *attrs, CssPropertyList *props,
             attrs->overflow = (Overflow) p->value.intVal;
             break;
          case CSS_PROPERTY_PADDING_TOP:
-            computeValue (&attrs->padding.top, p->value.lenVal, attrs->font);
+            computeValue (&attrs->padding.top, p->value.lenVal, attrs->font,
+                          containingBlockWidth (i));
             break;
          case CSS_PROPERTY_PADDING_BOTTOM:
-            computeValue (&attrs->padding.bottom, p->value.lenVal,attrs->font);
+            computeValue (&attrs->padding.bottom, p->value.lenVal, attrs->font,
+                          containingBlockWidth (i));
             break;
          case CSS_PROPERTY_PADDING_LEFT:
-            computeValue (&attrs->padding.left, p->value.lenVal, attrs->font);
+            computeValue (&attrs->padding.left, p->value.lenVal, attrs->font,
+                          containingBlockWidth (i));
             break;
          case CSS_PROPERTY_PADDING_RIGHT:
-            computeValue (&attrs->padding.right, p->value.lenVal, attrs->font);
+            computeValue (&attrs->padding.right, p->value.lenVal, attrs->font,
+                          containingBlockWidth (i));
             break;
          case CSS_PROPERTY_POSITION:
             attrs->position = (Position) p->value.intVal;
@@ -859,6 +869,51 @@ bool StyleEngine::computeValue (int *dest, CssLength value, Font *font,
       return true;
    } else
       return computeValue (dest, value, font);
+}
+
+/**
+ * \brief Estimate the content width of the containing block of stack
+ *    element i, for resolving percentage margins and paddings.
+ *
+ * Styles are computed before layout, so the real width is not known yet.
+ * This walks the ancestors from the viewport down, narrowing by each block
+ * ancestor's 'width'/'max-width' and its horizontal margin, border and
+ * padding. Like the 'vw' unit, the result is fixed at style time: it is not
+ * recomputed when the window is resized.
+ */
+int StyleEngine::containingBlockWidth (int i) {
+   int width = layout->getWidthViewport ();
+
+   for (int j = 1; j < i; j++) {
+      Style *s = stack->getRef (j)->style;
+      if (s == NULL)
+         continue;
+      /* Only boxes that lay out their children establish the containing
+       * block; inline padding/margins don't narrow the line. Table internals
+       * size to their contents, so they're beyond a cheap estimate: keep the
+       * width from the nearest block above them. */
+      if (s->display != DISPLAY_BLOCK &&
+          s->display != DISPLAY_LIST_ITEM &&
+          s->display != DISPLAY_INLINE_BLOCK)
+         continue;
+
+      int content;
+      if (isAbsLength (s->width))
+         content = absLengthVal (s->width);
+      else if (isPerLength (s->width))
+         content = multiplyWithPerLength (width, s->width);
+      else
+         content = width - s->boxDiffWidth ();
+
+      if (isAbsLength (s->maxWidth))
+         content = MIN (content, absLengthVal (s->maxWidth));
+      else if (isPerLength (s->maxWidth))
+         content = MIN (content, multiplyWithPerLength (width, s->maxWidth));
+
+      width = MAX (content, 0);
+   }
+
+   return width;
 }
 
 bool StyleEngine::computeLength (dw::core::style::Length *dest,

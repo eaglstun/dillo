@@ -31,6 +31,7 @@ TESTS = \
 	render/margin-rounding.html \
 	render/main-style.html \
 	render/margin-auto.html \
+	render/margin-padding-percent.html \
 	render/max-width-body.html \
 	render/max-width-div-clamp.html \
 	render/max-width-div.html \

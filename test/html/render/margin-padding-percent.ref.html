@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Test percentage margin and padding</title>
+<style>
+  body { margin: 0 }
+  .box { width: 400px; background: #ddd }
+  .pad { padding: 0 40px; background: lightgreen }
+  .mar { margin: 20px 100px 0 20px; background: lightblue }
+  .both { max-width: 300px; padding: 8px 20px; background: pink }
+</style>
+</head>
+<body>
+<div class="box">
+  <div class="pad">Padding of 10% on each side of a 400px wide box.</div>
+  <div class="mar">A 5% left and 25% right margin in a 400px box.</div>
+  <div class="both">Shorthand percentages, capped by max-width.</div>
+</div>
+</body>
+</html>

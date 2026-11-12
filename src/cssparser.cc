@@ -240,13 +240,13 @@ const CssPropertyInfo Css_property_info[CSS_PROPERTY_LAST] = {
    {"list-style-type", {CSS_TYPE_ENUM, CSS_TYPE_UNUSED},
     Css_list_style_type_enum_vals},
    {"margin-bottom",
-    {CSS_TYPE_SIGNED_LENGTH, CSS_TYPE_AUTO, CSS_TYPE_UNUSED}, NULL},
+    {CSS_TYPE_SIGNED_LENGTH_PERCENTAGE, CSS_TYPE_AUTO, CSS_TYPE_UNUSED}, NULL},
    {"margin-left",
-    {CSS_TYPE_SIGNED_LENGTH, CSS_TYPE_AUTO, CSS_TYPE_UNUSED}, NULL},
+    {CSS_TYPE_SIGNED_LENGTH_PERCENTAGE, CSS_TYPE_AUTO, CSS_TYPE_UNUSED}, NULL},
    {"margin-right",
-    {CSS_TYPE_SIGNED_LENGTH, CSS_TYPE_AUTO, CSS_TYPE_UNUSED}, NULL},
+    {CSS_TYPE_SIGNED_LENGTH_PERCENTAGE, CSS_TYPE_AUTO, CSS_TYPE_UNUSED}, NULL},
    {"margin-top",
-    {CSS_TYPE_SIGNED_LENGTH, CSS_TYPE_AUTO, CSS_TYPE_UNUSED}, NULL},
+    {CSS_TYPE_SIGNED_LENGTH_PERCENTAGE, CSS_TYPE_AUTO, CSS_TYPE_UNUSED}, NULL},
    {"marker-offset", {CSS_TYPE_UNUSED}, NULL},
    {"marks", {CSS_TYPE_UNUSED}, NULL},
    {"max-height", {CSS_TYPE_LENGTH_PERCENTAGE, CSS_TYPE_AUTO, CSS_TYPE_UNUSED},
@@ -261,10 +261,14 @@ const CssPropertyInfo Css_property_info[CSS_PROPERTY_LAST] = {
    {"outline-style", {CSS_TYPE_UNUSED}, NULL},
    {"outline-width", {CSS_TYPE_UNUSED}, NULL},
    {"overflow", {CSS_TYPE_ENUM, CSS_TYPE_UNUSED}, Css_overflow_enum_vals},
-   {"padding-bottom", {CSS_TYPE_LENGTH, CSS_TYPE_UNUSED}, NULL},
-   {"padding-left", {CSS_TYPE_LENGTH, CSS_TYPE_UNUSED}, NULL},
-   {"padding-right", {CSS_TYPE_LENGTH, CSS_TYPE_UNUSED}, NULL},
-   {"padding-top", {CSS_TYPE_LENGTH, CSS_TYPE_UNUSED}, NULL},
+   {"padding-bottom", {CSS_TYPE_LENGTH_PERCENTAGE, CSS_TYPE_UNUSED},
+    NULL},
+   {"padding-left", {CSS_TYPE_LENGTH_PERCENTAGE, CSS_TYPE_UNUSED},
+    NULL},
+   {"padding-right", {CSS_TYPE_LENGTH_PERCENTAGE, CSS_TYPE_UNUSED},
+    NULL},
+   {"padding-top", {CSS_TYPE_LENGTH_PERCENTAGE, CSS_TYPE_UNUSED},
+    NULL},
    {"position", {CSS_TYPE_ENUM, CSS_TYPE_UNUSED}, Css_position_enum_vals},
    {"quotes", {CSS_TYPE_UNUSED}, NULL},
    {"right", {CSS_TYPE_SIGNED_LENGTH, CSS_TYPE_UNUSED}, NULL},
@@ -756,6 +760,7 @@ bool CssParser::tokenMatchesProperty(CssPropertyName prop, CssValueType *type)
             return false;
          // Fall Through
       case CSS_TYPE_SIGNED_LENGTH:
+      case CSS_TYPE_SIGNED_LENGTH_PERCENTAGE:
          if (ttype == CSS_TK_DECINT || ttype == CSS_TK_FLOAT)
             return true;
          break;
@@ -937,6 +942,7 @@ bool CssParser::parseValue(CssPropertyName prop,
    case CSS_TYPE_LENGTH_PERCENTAGE_NUMBER:
    case CSS_TYPE_LENGTH:
    case CSS_TYPE_SIGNED_LENGTH:
+   case CSS_TYPE_SIGNED_LENGTH_PERCENTAGE:
       if (ttype == CSS_TK_DECINT || ttype == CSS_TK_FLOAT) {
          fval = atof(tval);
          lentype = CSS_LENGTH_TYPE_NONE;
@@ -996,6 +1002,7 @@ bool CssParser::parseValue(CssPropertyName prop,
             }
          } else if (!spaceSeparated &&
                     (type == CSS_TYPE_LENGTH_PERCENTAGE ||
+                     type == CSS_TYPE_SIGNED_LENGTH_PERCENTAGE ||
                      type == CSS_TYPE_LENGTH_PERCENTAGE_NUMBER) &&
                     ttype == CSS_TK_CHAR &&
                     tval[0] == '%') {

@@ -46,9 +46,10 @@ typedef enum {
                                    Note: In some cases, CSS_TYPE_LENGTH is used
                                    instead of CSS_TYPE_LENGTH_PERCENTAGE,
                                    only because Dw cannot handle percentages
-                                   in this particular case (e.g.
-                                   'margin-*-width'). */
+                                   in this particular case. */
    CSS_TYPE_SIGNED_LENGTH,      /**< As CSS_TYPE_LENGTH but may be negative. */
+   CSS_TYPE_SIGNED_LENGTH_PERCENTAGE, /**< As CSS_TYPE_LENGTH_PERCENTAGE but
+                                   may be negative (e.g. 'margin-*'). */
    CSS_TYPE_LENGTH_PERCENTAGE_NUMBER,  /* <length> or <percentage>, or <number> */
    CSS_TYPE_AUTO,               /**< Represented as CssLength of type
                                    CSS_LENGTH_TYPE_AUTO */
