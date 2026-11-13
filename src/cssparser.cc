@@ -77,6 +77,10 @@ static const char *const Css_border_width_enum_vals[] = {
    "thin", "medium", "thick", NULL
 };
 
+static const char *const Css_box_sizing_enum_vals[] = {
+   "content-box", "border-box", NULL
+};
+
 static const char *const Css_clear_enum_vals[] = {
    "left", "right", "both", "none", NULL
 };
@@ -205,6 +209,7 @@ const CssPropertyInfo Css_property_info[CSS_PROPERTY_LAST] = {
    {"border-top-width", {CSS_TYPE_ENUM, CSS_TYPE_LENGTH, CSS_TYPE_UNUSED},
     Css_border_width_enum_vals},
    {"bottom", {CSS_TYPE_SIGNED_LENGTH, CSS_TYPE_UNUSED}, NULL},
+   {"box-sizing", {CSS_TYPE_ENUM, CSS_TYPE_UNUSED}, Css_box_sizing_enum_vals},
    {"caption-side", {CSS_TYPE_UNUSED}, NULL},
    {"clear", {CSS_TYPE_ENUM, CSS_TYPE_UNUSED}, Css_clear_enum_vals},
    {"clip", {CSS_TYPE_UNUSED}, NULL},
@@ -240,13 +245,13 @@ const CssPropertyInfo Css_property_info[CSS_PROPERTY_LAST] = {
    {"list-style-type", {CSS_TYPE_ENUM, CSS_TYPE_UNUSED},
     Css_list_style_type_enum_vals},
    {"margin-bottom",
-    {CSS_TYPE_SIGNED_LENGTH, CSS_TYPE_AUTO, CSS_TYPE_UNUSED}, NULL},
+    {CSS_TYPE_SIGNED_LENGTH_PERCENTAGE, CSS_TYPE_AUTO, CSS_TYPE_UNUSED}, NULL},
    {"margin-left",
-    {CSS_TYPE_SIGNED_LENGTH, CSS_TYPE_AUTO, CSS_TYPE_UNUSED}, NULL},
+    {CSS_TYPE_SIGNED_LENGTH_PERCENTAGE, CSS_TYPE_AUTO, CSS_TYPE_UNUSED}, NULL},
    {"margin-right",
-    {CSS_TYPE_SIGNED_LENGTH, CSS_TYPE_AUTO, CSS_TYPE_UNUSED}, NULL},
+    {CSS_TYPE_SIGNED_LENGTH_PERCENTAGE, CSS_TYPE_AUTO, CSS_TYPE_UNUSED}, NULL},
    {"margin-top",
-    {CSS_TYPE_SIGNED_LENGTH, CSS_TYPE_AUTO, CSS_TYPE_UNUSED}, NULL},
+    {CSS_TYPE_SIGNED_LENGTH_PERCENTAGE, CSS_TYPE_AUTO, CSS_TYPE_UNUSED}, NULL},
    {"marker-offset", {CSS_TYPE_UNUSED}, NULL},
    {"marks", {CSS_TYPE_UNUSED}, NULL},
    {"max-height", {CSS_TYPE_LENGTH_PERCENTAGE, CSS_TYPE_AUTO, CSS_TYPE_UNUSED},
@@ -261,10 +266,14 @@ const CssPropertyInfo Css_property_info[CSS_PROPERTY_LAST] = {
    {"outline-style", {CSS_TYPE_UNUSED}, NULL},
    {"outline-width", {CSS_TYPE_UNUSED}, NULL},
    {"overflow", {CSS_TYPE_ENUM, CSS_TYPE_UNUSED}, Css_overflow_enum_vals},
-   {"padding-bottom", {CSS_TYPE_LENGTH, CSS_TYPE_UNUSED}, NULL},
-   {"padding-left", {CSS_TYPE_LENGTH, CSS_TYPE_UNUSED}, NULL},
-   {"padding-right", {CSS_TYPE_LENGTH, CSS_TYPE_UNUSED}, NULL},
-   {"padding-top", {CSS_TYPE_LENGTH, CSS_TYPE_UNUSED}, NULL},
+   {"padding-bottom", {CSS_TYPE_LENGTH_PERCENTAGE, CSS_TYPE_UNUSED},
+    NULL},
+   {"padding-left", {CSS_TYPE_LENGTH_PERCENTAGE, CSS_TYPE_UNUSED},
+    NULL},
+   {"padding-right", {CSS_TYPE_LENGTH_PERCENTAGE, CSS_TYPE_UNUSED},
+    NULL},
+   {"padding-top", {CSS_TYPE_LENGTH_PERCENTAGE, CSS_TYPE_UNUSED},
+    NULL},
    {"position", {CSS_TYPE_ENUM, CSS_TYPE_UNUSED}, Css_position_enum_vals},
    {"quotes", {CSS_TYPE_UNUSED}, NULL},
    {"right", {CSS_TYPE_SIGNED_LENGTH, CSS_TYPE_UNUSED}, NULL},
@@ -298,6 +307,7 @@ typedef struct {
       CSS_SHORTHAND_MULTIPLE,   /**< [ p1 || p2 || ...], the property pi is
                                  * determined  by the type */
       CSS_SHORTHAND_DIRECTIONS, /**< <t>{1,4} */
+      CSS_SHORTHAND_PAIR,       /**< <t>{1,2}, start and end */
       CSS_SHORTHAND_BORDER,     /**< special, used for 'border' */
       CSS_SHORTHAND_FONT        /**< special, used for 'font' */
    } type;
@@ -306,6 +316,8 @@ typedef struct {
                                        *   CSS_PROPERTY_END
                                        * CSS_SHORTHAND_DIRECTIONS:
                                        *   must have length 4
+                                       * CSS_SHORTHAND_PAIR:
+                                       *   must have length 2
                                        * CSS_SHORTHAND_BORDERS:
                                        *   must have length 12
                                        * CSS_SHORTHAND_FONT:
@@ -384,6 +396,27 @@ const CssPropertyName Css_margin_properties[] = {
    CSS_PROPERTY_MARGIN_RIGHT
 };
 
+/* Logical properties. Dillo only lays out horizontal, left-to-right text, so
+ * the inline axis is left/right and the block axis is top/bottom. */
+const CssPropertyName Css_margin_block_properties[] = {
+   CSS_PROPERTY_MARGIN_TOP, CSS_PROPERTY_MARGIN_BOTTOM
+};
+const CssPropertyName Css_margin_block_end_properties[] = {
+   CSS_PROPERTY_MARGIN_BOTTOM, CSS_PROPERTY_END
+};
+const CssPropertyName Css_margin_block_start_properties[] = {
+   CSS_PROPERTY_MARGIN_TOP, CSS_PROPERTY_END
+};
+const CssPropertyName Css_margin_inline_properties[] = {
+   CSS_PROPERTY_MARGIN_LEFT, CSS_PROPERTY_MARGIN_RIGHT
+};
+const CssPropertyName Css_margin_inline_end_properties[] = {
+   CSS_PROPERTY_MARGIN_RIGHT, CSS_PROPERTY_END
+};
+const CssPropertyName Css_margin_inline_start_properties[] = {
+   CSS_PROPERTY_MARGIN_LEFT, CSS_PROPERTY_END
+};
+
 const CssPropertyName Css_outline_properties[] = {
    CSS_PROPERTY_OUTLINE_COLOR,
    CSS_PROPERTY_OUTLINE_STYLE,
@@ -396,6 +429,25 @@ const CssPropertyName Css_padding_properties[] = {
    CSS_PROPERTY_PADDING_BOTTOM,
    CSS_PROPERTY_PADDING_LEFT,
    CSS_PROPERTY_PADDING_RIGHT
+};
+
+const CssPropertyName Css_padding_block_properties[] = {
+   CSS_PROPERTY_PADDING_TOP, CSS_PROPERTY_PADDING_BOTTOM
+};
+const CssPropertyName Css_padding_block_end_properties[] = {
+   CSS_PROPERTY_PADDING_BOTTOM, CSS_PROPERTY_END
+};
+const CssPropertyName Css_padding_block_start_properties[] = {
+   CSS_PROPERTY_PADDING_TOP, CSS_PROPERTY_END
+};
+const CssPropertyName Css_padding_inline_properties[] = {
+   CSS_PROPERTY_PADDING_LEFT, CSS_PROPERTY_PADDING_RIGHT
+};
+const CssPropertyName Css_padding_inline_end_properties[] = {
+   CSS_PROPERTY_PADDING_RIGHT, CSS_PROPERTY_END
+};
+const CssPropertyName Css_padding_inline_start_properties[] = {
+   CSS_PROPERTY_PADDING_LEFT, CSS_PROPERTY_END
 };
 
 const CssPropertyName Css_border_properties[] = {
@@ -447,10 +499,34 @@ static const CssShorthandInfo Css_shorthand_info[] = {
     Css_list_style_properties},
    {"margin", CssShorthandInfo::CSS_SHORTHAND_DIRECTIONS,
     Css_margin_properties},
+   {"margin-block", CssShorthandInfo::CSS_SHORTHAND_PAIR,
+    Css_margin_block_properties},
+   {"margin-block-end", CssShorthandInfo::CSS_SHORTHAND_MULTIPLE,
+    Css_margin_block_end_properties},
+   {"margin-block-start", CssShorthandInfo::CSS_SHORTHAND_MULTIPLE,
+    Css_margin_block_start_properties},
+   {"margin-inline", CssShorthandInfo::CSS_SHORTHAND_PAIR,
+    Css_margin_inline_properties},
+   {"margin-inline-end", CssShorthandInfo::CSS_SHORTHAND_MULTIPLE,
+    Css_margin_inline_end_properties},
+   {"margin-inline-start", CssShorthandInfo::CSS_SHORTHAND_MULTIPLE,
+    Css_margin_inline_start_properties},
    {"outline", CssShorthandInfo::CSS_SHORTHAND_MULTIPLE,
     Css_outline_properties},
    {"padding", CssShorthandInfo::CSS_SHORTHAND_DIRECTIONS,
     Css_padding_properties},
+   {"padding-block", CssShorthandInfo::CSS_SHORTHAND_PAIR,
+    Css_padding_block_properties},
+   {"padding-block-end", CssShorthandInfo::CSS_SHORTHAND_MULTIPLE,
+    Css_padding_block_end_properties},
+   {"padding-block-start", CssShorthandInfo::CSS_SHORTHAND_MULTIPLE,
+    Css_padding_block_start_properties},
+   {"padding-inline", CssShorthandInfo::CSS_SHORTHAND_PAIR,
+    Css_padding_inline_properties},
+   {"padding-inline-end", CssShorthandInfo::CSS_SHORTHAND_MULTIPLE,
+    Css_padding_inline_end_properties},
+   {"padding-inline-start", CssShorthandInfo::CSS_SHORTHAND_MULTIPLE,
+    Css_padding_inline_start_properties},
 };
 
 #define CSS_SHORTHAND_NUM \
@@ -756,6 +832,7 @@ bool CssParser::tokenMatchesProperty(CssPropertyName prop, CssValueType *type)
             return false;
          // Fall Through
       case CSS_TYPE_SIGNED_LENGTH:
+      case CSS_TYPE_SIGNED_LENGTH_PERCENTAGE:
          if (ttype == CSS_TK_DECINT || ttype == CSS_TK_FLOAT)
             return true;
          break;
@@ -937,6 +1014,7 @@ bool CssParser::parseValue(CssPropertyName prop,
    case CSS_TYPE_LENGTH_PERCENTAGE_NUMBER:
    case CSS_TYPE_LENGTH:
    case CSS_TYPE_SIGNED_LENGTH:
+   case CSS_TYPE_SIGNED_LENGTH_PERCENTAGE:
       if (ttype == CSS_TK_DECINT || ttype == CSS_TK_FLOAT) {
          fval = atof(tval);
          lentype = CSS_LENGTH_TYPE_NONE;
@@ -996,6 +1074,7 @@ bool CssParser::parseValue(CssPropertyName prop,
             }
          } else if (!spaceSeparated &&
                     (type == CSS_TYPE_LENGTH_PERCENTAGE ||
+                     type == CSS_TYPE_SIGNED_LENGTH_PERCENTAGE ||
                      type == CSS_TYPE_LENGTH_PERCENTAGE_NUMBER) &&
                     ttype == CSS_TK_CHAR &&
                     tval[0] == '%') {
@@ -1367,6 +1446,40 @@ void CssParser::parseDeclaration(CssPropertyList *props,
                                       .properties[i],
                                       dir_types[dir_set[n - 1][i]],
                                       dir_vals[dir_set[n - 1][i]]);
+                  } else
+                     MSG_CSS("no values for shorthand property '%s'\n",
+                             Css_shorthand_info[sh_index].symbol);
+
+                  break;
+
+               case CssShorthandInfo::CSS_SHORTHAND_PAIR:
+                  n = 0;
+                  while (n < 2) {
+                     if (tokenMatchesProperty(Css_shorthand_info[sh_index].
+                                              properties[0], &type) &&
+                         parseValue(Css_shorthand_info[sh_index]
+                                    .properties[0], type, &val)) {
+                        dir_vals[n] = val;
+                        dir_types[n] = type;
+                        n++;
+                     } else
+                        break;
+                  }
+
+                  weight = parseWeight();
+                  if (n > 0) {
+                     /* One value sets both sides; two set start, end. */
+                     for (i = 0; i < 2; i++) {
+                        int k = (n == 1) ? 0 : i;
+                        if (weight && importantProps)
+                           importantProps->set(Css_shorthand_info[sh_index]
+                                               .properties[i],
+                                               dir_types[k], dir_vals[k]);
+                        else
+                           props->set(Css_shorthand_info[sh_index]
+                                      .properties[i],
+                                      dir_types[k], dir_vals[k]);
+                     }
                   } else
                      MSG_CSS("no values for shorthand property '%s'\n",
                              Css_shorthand_info[sh_index].symbol);

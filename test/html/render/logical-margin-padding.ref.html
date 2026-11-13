@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Test logical margin and padding properties</title>
+<style>
+  body { margin: 0 }
+  div { background: lightgreen; border: solid 1px }
+  .a { padding: 5px 20px 15px 20px }
+  .b { margin: 10px 10px 10px 30px }
+  .c { padding-left: 40px; margin-top: 8px;
+       padding-bottom: 4px; margin-right: 60px }
+</style>
+</head>
+<body>
+  <div class="a">padding-inline and a two-value padding-block</div>
+  <div class="b">two-value margin-inline and a one-value margin-block</div>
+  <div class="c">start and end longhands</div>
+</body>
+</html>

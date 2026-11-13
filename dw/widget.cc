@@ -942,8 +942,10 @@ int Widget::calcWidth (style::Length cssValue, int refWidth, Widget *refWidget,
    if (style::isAbsLength (cssValue)) {
       DBG_OBJ_MSGF ("resize", 1, "absolute width: %dpx",
                     style::absLengthVal (cssValue));
-      width = misc::max (style::absLengthVal (cssValue) + boxDiffWidth (),
-                         limitMinWidth);
+      /* A border-box width can't be narrower than its border and padding. */
+      width = misc::max (style::absLengthVal (cssValue) + boxSizingDiffWidth (),
+                         boxDiffWidth ());
+      width = misc::max (width, limitMinWidth);
    } else if (style::isPerLength (cssValue)) {
       DBG_OBJ_MSGF ("resize", 1, "percentage width: %g%%",
                     100 * style::perLengthVal_useThisOnlyForDebugging
@@ -1052,7 +1054,8 @@ int Widget::calcHeight (style::Length cssValue, bool usePercentage,
       DBG_OBJ_MSGF ("resize", 1, "absolute height: %dpx",
                     style::absLengthVal (cssValue));
       height =
-         misc::max (style::absLengthVal (cssValue) + boxDiffHeight (), 0);
+         misc::max (style::absLengthVal (cssValue) + boxSizingDiffHeight (),
+                    boxDiffHeight ());
    } else if (style::isPerLength (cssValue)) {
       DBG_OBJ_MSGF ("resize", 1, "percentage height: %g%%",
                     100 *
@@ -1756,14 +1759,14 @@ void Widget::markExtremesChange (int ref)
 
 int Widget::applyPerWidth (int containerWidth, style::Length perWidth)
 {
-   return style::multiplyWithPerLength (containerWidth, perWidth)
-      + boxDiffWidth ();
+   return misc::max (style::multiplyWithPerLength (containerWidth, perWidth)
+                     + boxSizingDiffWidth (), boxDiffWidth ());
 }
 
 int Widget::applyPerHeight (int containerHeight, style::Length perHeight)
 {
-   return style::multiplyWithPerLength (containerHeight, perHeight)
-      + boxDiffHeight ();
+   return misc::max (style::multiplyWithPerLength (containerHeight, perHeight)
+                     + boxSizingDiffHeight (), boxDiffHeight ());
 }
 
 /**
